@@ -72,7 +72,8 @@ If an order changes after a memory was saved, the database wins. Each memory is 
 
 ## Trade-offs
 
-What did each guard cost you in latency (from your traces), and was it worth it? Did you
-make the Guardrail fail closed, and what does that cost when Gemini is slow? If you changed
-`T-MEM-MINSCORE` or argued against any threshold, give the evidence here, and keep the
-original gate in your report.
+What each check costs in time: to add after the build, from the traces.
+
+If the Guardrail can't get a clear answer from Gemini, the message is stopped with an error rather than let through. The cost is that a customer may wait, get an error and have to try again. If Gemini is fully down, this costs nothing extra, as the support agent couldn't answer either. It matters when Gemini is only partly working. Letting messages through then would bypass the Guardrail, so requests that aren't about support, like recipes, would get answered and cost tokens and money. Someone could even make the Guardrail fail on purpose to get past it.
+
+I kept the memory cut-off at 0.25, the course's own figure. I'll check it against my planted memory's score after the build.
