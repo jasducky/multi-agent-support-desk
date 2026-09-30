@@ -50,7 +50,14 @@ Alice never sees Bob's laptop.
 - **One thing the trace showed that the reply didn't:**
 
 ## Stage 6: Sanitizer and Security Judge
-- **I decided (who may block, which A2A method):**
+- **I decided (who may block, which A2A method):** I decided on a layered Judge that works in two steps, and either step can block on its own.
+
+    1. The Judge always runs its pattern check, which is code. It looks for the shapes of known attacks: database commands, web page code, template tricks, commands aimed at the server, and fixed phrases such as "ignore your instructions". If it finds one, the message is blocked straight away and the model is never called, so known attacks are stopped quickly and the same way every time.
+    2. If the pattern check finds nothing, the model always reads the message. It looks for attacks a list can't recognise, such as someone claiming to be in admin mode, or "ignore your instructions" written in French or spaced out. If it judges the message an attack, it blocks it and gives the reason.
+
+  The pattern list is built from attack categories, not copied from the course's test set, so it catches new attacks of the same shape rather than only the ones being tested. It matches attack shapes rather than single words, so "can you drop the gift wrap" still gets through. The pattern check is the Judge's tool, and the Judge always runs it first rather than waiting for its model to decide to. The spec leaves open whether the pattern tool can block without the model. I decided it can, because a check that must always happen can't be left to the model to remember, and waiting for the model would slow down blocking an obvious attack. The model can also call the same check itself when it is reading something borderline.
+
+  For A2A I'm using message/send, the current version of the standard. The course's reference version uses the older tasks/send, and I'd only pick that to work with an existing service built on it. I worked through this with Claude Code.
 - **Predicted vs actual X01 latency:**
 - **When I stopped the Judge, my pipeline first:**
 - **Failing trajectory saved at:**
