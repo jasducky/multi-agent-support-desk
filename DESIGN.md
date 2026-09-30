@@ -16,9 +16,13 @@ Each check is a separate part with its own job and only the access it needs, so 
 
 ## Responsibilities
 
-Which component decides that a customer may only see their own orders, and where exactly is
-that line of code or SQL? Which component may hold an API key? Which one decides a turn is
-over budget? For every rule in SPEC §11, say whether it is enforced **in code**, **in a
+Who stops a customer seeing someone else's orders: two parts together. The tool's database query in the Toolbox only returns an order when the order number and the email both match. The pipeline fixes that email to the logged-in customer at login, so the model can't change it. (Exact file and line to add after the build.)
+
+Who holds the API keys: only the programs that call an outside service. The pipeline, the Judge and the Masker hold the Gemini key, and the pipeline holds the Mem0 key. The Toolbox holds the database password. Keys live in a .env file that is kept out of git, never in the code. The model never sees them, and the web page never gets one, as anything sent to a browser can be read.
+
+Who stops a turn that goes over budget: the pipeline. It is the only part that sees every step of a turn, so it counts the tool calls, tokens and time, and stops the turn when one goes over the limit.
+
+> (To do: the rules table.) For every rule in SPEC §11, say whether it is enforced **in code**, **in a
 prompt**, or **both**, and why. This table is the core of `G-ENFORCE`.
 
 ## Communication
