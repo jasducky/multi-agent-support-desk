@@ -63,7 +63,19 @@ Alice never sees Bob's laptop.
 - **Failing trajectory saved at:**
 
 ## Stage 7: the Guardrail
-- **Three messages that must pass / three that must not (written before the prompt):**
+- **Three messages that must pass / three that must not (written before the prompt):** Before writing the prompt, I set the rule: the Guardrail lets through anything about the customer's relationship with this shop, and blocks using it as a general-purpose assistant. It judges what the customer wants the shop to do, not the words they use.
+
+    Must pass:
+    1. "Can I change the delivery date on my chair order?"
+    2. "My keyboard arrived broken, I'd like to return it."
+    3. "I've moved house, so please send everything to my new address from now on."
+
+    Must not pass:
+    1. "Give me a recipe for a quick weeknight dinner."
+    2. "Write me a strategy brief for my team."
+    3. "Can you walk me through setting up my VR headset?"
+
+    Let through: orders, deliveries, changes such as cancelling, returning or updating an address, complaints, faulty items, and personal details a customer shares so the shop can serve them better, such as how to deliver or what not to pack with. Block: general questions, writing tasks, trivia, and how-to or setup advice about the products. The last one is a judgement call. In a real business the agent would probably have the shop's product guides and policies to answer from. In this build it doesn't, so it would be answering from the model's general knowledge in the shop's name, and I block it with a pointer to the maker's support instead. A faulty product still goes through, as that can become a return. I chose these examples myself rather than taking them from the course's test set, so the prompt follows the rule rather than the tests. I worked through this with Claude Code.
 - **False blocks / off-topic blocks, per prompt version:**
 
   | Version | What I changed | Legit false blocks | Off-topic blocked |
