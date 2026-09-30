@@ -60,9 +60,17 @@ For A2A I use message/send, the current version of the standard. A Judge verdict
 
 ## State
 
-What is stored, where, and for how long: sessions, memories, traces, run logs, the action
-log? Which of them contain customer data, and who can read each one? What happens to
-memory when a customer's order changes after the memory was saved?
+| What is saved | Where | How long | Customer data? | Who can read it |
+|---|---|---|---|---|
+| The conversation (session) | In the pipeline's memory | Until logout or restart | Yes | Only the pipeline |
+| Long-term memories | Mem0 | Until deleted | Yes, what customers told the shop | Anything holding the Mem0 key |
+| Traces | Phoenix, saved to disk | Until deleted | Yes, messages and replies in full | Me, on my laptop |
+| Run files, one per message | The runs folder, kept out of git | Until deleted | Yes | Me, on my laptop |
+| The action log | The database | Until deleted | Yes, who asked for what | The Toolbox, and me |
+
+In a real shop, each of these would have a time limit after which it is deleted.
+
+If an order changes after a memory was saved, the database wins. Each memory is shown to the agent with the date it was saved (Mem0 already records this), and the agent's instructions say order facts come from the tools. If a memory and the database disagree, for example a cancel the customer asked for last week that never happened, the agent answers from the database, mentions the earlier request and when it was made, and logs a new request so someone follows it up. The agent can't read the action log itself, so it only spots this through memory.
 
 ## Trade-offs
 
