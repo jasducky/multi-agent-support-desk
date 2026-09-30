@@ -58,7 +58,7 @@ Alice never sees Bob's laptop.
   The pattern list is built from attack categories, not copied from the course's test set, so it catches new attacks of the same shape rather than only the ones being tested. It matches attack shapes rather than single words, so "can you drop the gift wrap" still gets through. The pattern check is the Judge's tool, and the Judge always runs it first rather than waiting for its model to decide to. The spec leaves open whether the pattern tool can block without the model. I decided it can, because a check that must always happen can't be left to the model to remember, and waiting for the model would slow down blocking an obvious attack. The model can also call the same check itself when it is reading something borderline.
 
   For A2A I'm using message/send, the current version of the standard. The course's reference version uses the older tasks/send, and I'd only pick that to work with an existing service built on it. I worked through this with Claude Code.
-- **Predicted vs actual X01 latency:**
+- **Predicted vs actual X01 latency:** I predict X01 is blocked in under half a second, because it is a database command that the Judge's pattern check catches before its model is ever called. An attack that gets past the pattern check would take about 2 seconds, since the model has to read it. I'm assuming the Judge uses gemini-2.5-flash, the same model as the support agent, which is a fast model built for short answers like the Judge's allow or block. The course's own example of a Judge step that used the model shows 2.2 seconds. I will add the actual time after the build.
 - **When I stopped the Judge, my pipeline first:**
 - **Failing trajectory saved at:**
 
