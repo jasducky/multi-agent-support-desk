@@ -41,7 +41,7 @@ Alice never sees Bob's laptop.
   ```
 
   Each line shows its own time (the tool's time shows on its result line, once the answer comes back), and the last line of a turn shows the total with a tick if it is within the speed target or a warning if it is over, so I can see whether a turn is slow and which check made it slow. The tool line shows the email as bound, so every call proves my stage 3 decision. The recall line shows the memory text rather than a count, so I can see which memory was used without opening the file. The agent's reply is printed in full at the end of each turn.
-- **I predicted the first event after the agent stage would be:**
+- **I predicted the first event after the agent stage would be:** I expect the model's decision (the llm event) to come first. When the agent step starts, the model reads Alice's message and decides whether it needs a tool. The tools only run when the model asks for one, so its decision to call get-order-status comes first and the tool call follows it.
 - **What happened:**
 
 ## Stage 5: one trace per turn
