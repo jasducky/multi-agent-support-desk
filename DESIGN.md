@@ -40,9 +40,23 @@ How each of the course's rules (SPEC §11) is enforced:
 
 ## Communication
 
-How does a message travel from the CLI or browser to the database and back? Name each hop's
-protocol (function call, MCP, A2A JSON-RPC, HTTP, NDJSON). Which A2A method did you
-implement, and what does a verdict look like on the wire?
+A message from the web page or the command line goes through these steps, in this order:
+
+1. The web page sends it to the pipeline over HTTP. The command line calls the pipeline directly.
+2. Sanitize checks its length and characters, inside the pipeline.
+3. The Judge checks it for attacks. It is a separate program, reached over A2A.
+4. The Guardrail checks it is a question this shop's desk should answer, inside the pipeline. It asks Gemini over HTTP.
+5. Recall fetches relevant memories from Mem0 over HTTP.
+6. The support agent asks Gemini what to do over HTTP, and calls its tools through the Toolbox over MCP. The Toolbox runs the SQL query on Postgres.
+7. The Masker checks the reply for other people's details, over A2A.
+8. Save stores what the customer said in Mem0 over HTTP.
+9. Every step is streamed back to the web page as it happens, one line per step (NDJSON).
+
+For A2A I use message/send, the current version of the standard. A Judge verdict on the wire looks like this:
+
+```json
+{ "verdict": "allow", "reason": "no injection patterns" }
+```
 
 ## State
 
