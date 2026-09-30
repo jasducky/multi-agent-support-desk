@@ -6,7 +6,7 @@
 
 ## Components
 
-Separate programs on my laptop: the Postgres database, the MCP Toolbox that runs the three tools (port 5000), the Security Judge (port 10002), the Data Masker (port 10003) and Phoenix for traces (port 6006).
+Separate programs on my laptop: the Postgres database, the MCP Toolbox that runs the three tools (port 5001, not the course's 5000, because macOS's AirPlay Receiver uses 5000), the Security Judge (port 10002), the Data Masker (port 10003) and Phoenix for traces (port 6006).
 
 One main program, the pipeline, runs each message through its steps: sanitize, then the Judge, the Guardrail, memory recall, the support agent, the Masker and memory save. The command line and the web page are two ways into it.
 
