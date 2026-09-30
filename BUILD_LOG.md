@@ -91,7 +91,7 @@ Alice never sees Bob's laptop.
 - **Something the UI shows that the CLI doesn't (feature or leak?):**
 
 ## Stage 10: the eval runner
-- **How I handled the memory waits:**
+- **How I handled the memory waits:** I'll plant all ten memory facts first, run the other tests, then ask the ten memory questions. The other tests take longer than the two-minute wait, so no time is spent just waiting. The runner will check the time before each question. I won't run the memory tests all at once, as that could hit the model's usage limits and make failures harder to follow.
 - **First run's failing rows, and what I changed:**
 - **Second run: see `reports/eval.json` (don't retype numbers here).**
 - **Successful turn I read end to end (trace id), and what it taught me:**
