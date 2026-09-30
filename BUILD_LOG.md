@@ -29,7 +29,16 @@ Alice never sees Bob's laptop.
 - **What happened:**
 
 ## Stage 4: the pipeline and its events
-- **My hand-sketched CLI lines:**
+- **My hand-sketched CLI lines:** I chose short lines that say what happened, whether it passed, how long it took and why. The full detail stays in the saved run file and in Phoenix. I sketched these with Claude Code:
+
+  ```
+  ✓ judge        passed   2.2s   no injection patterns
+  → tool         get-order-status  order 3  (email: bound to login)
+  ◆ recall       used: "leave packages at the back door" (0.62) · 2 skipped, below cutoff   0.3s
+  ✗ judge        BLOCKED  0.9s   SQL injection pattern
+  ```
+
+  Each line shows its own time, and the last line of a turn shows the total with a tick if it is within the speed target or a warning if it is over, so I can see whether a turn is slow and which check made it slow. The tool line shows the email as bound, so every call proves my stage 3 decision. The recall line shows the memory text rather than a count, so I can see which memory was used without opening the file. The agent's reply is printed in full at the end of each turn.
 - **I predicted the first event after the agent stage would be:**
 - **What happened:**
 
