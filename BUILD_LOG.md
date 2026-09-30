@@ -87,7 +87,7 @@ Alice never sees Bob's laptop.
 - **What the Masker reported on my PII test:**
 
 ## Stage 9: the web UI
-- **My sketch, in words:**
+- **My sketch, in words:** The chat is on the left and the steps are on the right, read top to bottom. The customer's message comes first, then its steps fill in live on the right, then the reply appears below them. I'll try a couple of versions when building and keep the clearest. Customers wouldn't see this, as it's for the course, to watch the system work, and in a real shop only the product and technical people who assess the system would see it.
 - **Something the UI shows that the CLI doesn't (feature or leak?):**
 
 ## Stage 10: the eval runner
