@@ -24,8 +24,8 @@ Alice never sees Bob's laptop.
 - **What happened (order 5 as alice):**
 
 ## Stage 3: the agent, and a bare CLI
-- **I decided (tools loaded, how the email is bound):**
-- **I predicted the "order 5 for bob" request would:**
+- **I decided (tools loaded, how the email is bound):** The agent loads only its own group of three tools: look up an order, list the customer's orders, and log a request. All three only read orders or write to the request log, so if a customer asks to cancel, the agent logs the request and a person or another system acts on it later. The customer's email is fixed by the code at login as a bound parameter. The model never sees that field and can't change it. It only fills in what the customer asked about, such as the order number or the kind of request. I worked through this with Claude Code. If the model filled in the email, Alice could say she was Bob and get his order back, which is the incident in the course's reference version all over again.
+- **I predicted the "order 5 for bob" request would:** Logged in as Alice, I'll ask the agent to look up order 5 for bob.smith@techmail.com. I think the model will most likely still call the look-up tool with order 5, as it can't see that the email is fixed to Alice. The tool runs with Alice's email and finds nothing, and the agent tells her the order isn't on her account, with nothing about Bob's laptop. I'll also put a line in the agent's instruction to only help with the logged-in customer's own orders, but the design doesn't rely on it. The agent's recorded steps from stage 4 will show whether the tool was called.
 - **What happened:**
 
 ## Stage 4: the pipeline and its events
