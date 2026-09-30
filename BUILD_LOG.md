@@ -45,7 +45,7 @@ Alice never sees Bob's laptop.
 - **What happened:**
 
 ## Stage 5: one trace per turn
-- **I decided (what goes in span attributes, who can see Phoenix):**
+- **I decided (what goes in span attributes, who can see Phoenix):** I decided to record the full detail in the trace: the customer's message and the conversation so far, the tool calls and what they returned, the time, the tokens, the model and the prompt version. A message can carry personal details, such as a phone number, and I need to see them to check that the mask step hid them if they came back in the reply. So I control who can open the traces rather than hiding the data. The one exception is a card number, which a customer would only type by accident, and that gets removed before anything is recorded. In this build Phoenix runs only on my laptop with no login, so only I can see it. In a real shop I'd limit it to named engineers behind a login. I worked through this with Claude Code, and the course's spec takes the same position: it requires the message, the reply and the prompts in the trace.
 - **Trace id:**
 - **One thing the trace showed that the reply didn't:**
 
