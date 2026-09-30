@@ -22,8 +22,21 @@ Who holds the API keys: only the programs that call an outside service. The pipe
 
 Who stops a turn that goes over budget: the pipeline. It is the only part that sees every step of a turn, so it counts the tool calls, tokens and time, and stops the turn when one goes over the limit.
 
-> (To do: the rules table.) For every rule in SPEC §11, say whether it is enforced **in code**, **in a
-prompt**, or **both**, and why. This table is the core of `G-ENFORCE`.
+How each of the course's rules (SPEC §11) is enforced:
+
+| Rule | Code or prompt | Why |
+|---|---|---|
+| R-1. Customers only see their own orders | Code | The database query checks the email. A prompt could be ignored |
+| R-2. Anything that must happen every time is built into the steps | Code | A model can forget an instruction. A step always runs |
+| R-3. The agent has no tool that changes an order | Code | It only gets the three tools, so a cancel becomes a request |
+| R-4. If a check stops working, the message is stopped with an error | Code | Otherwise a broken check would let everything through |
+| R-5. Only save what the customer said | Code | The agent's own replies are never saved as memories |
+| R-6. The guardrail only lets through questions this shop's support desk should answer | Prompt | No code can tell a support question from any other, so the guardrail works it out from instructions I write. Those instructions have to describe this shop's kinds of questions, with real examples. Generic ones got it wrong in the course's version: they blocked "leave packages at the back door" and let a poem through |
+| R-7. Memories that are too long are thrown away | Code | A length check before a memory is used |
+| R-8. A check only changes what it is meant to | Code | The masker hides the listed details and nothing else |
+| R-9. The Judge always says clearly "allow" or "block" | Code | Its answer has a fixed shape, so silence can't be mistaken for "safe" |
+| R-10. Traces are kept after a restart | Code | Phoenix runs on its own and saves to disk |
+| R-11. The action log only accepts the five set labels | Code | The database refuses anything else |
 
 ## Communication
 
