@@ -60,15 +60,13 @@ For A2A I use message/send, the current version of the standard. A Judge verdict
 
 ## State
 
-| What is saved | Where | How long | Customer data? | Who can read it |
+| What is saved | Where | Customer data? | This build: how long, and who can read it | A real shop |
 |---|---|---|---|---|
-| The conversation (session) | In the pipeline's memory | Until logout or restart | Yes | Only the pipeline |
-| Long-term memories | Mem0 | Until deleted | Yes, what customers told the shop | Anything holding the Mem0 key |
-| Traces | Phoenix, saved to disk | Until deleted | Yes, messages and replies in full | Me, on my laptop |
-| Run files, one per message | The runs folder, kept out of git | Until deleted | Yes | Me, on my laptop |
-| The action log | The database | Until deleted | Yes, who asked for what | The Toolbox, and me |
-
-In a real shop, each of these would have a time limit after which it is deleted.
+| The conversation | The main program's working memory | Yes | Until logout or restart. Nobody can open it. Copies are kept in the traces and run files | Saved to a database that support staff can look up, and kept as long as the shop's policy says |
+| Long-term memories | Mem0 | Yes | Cleared for the test customers at the start of every test run. Readable by anything with the Mem0 key | Expire after 12 months (Mem0 supports an expiry date) |
+| Traces | Phoenix, on disk | Yes, in full | Kept until I submit, as they're my evidence. Only I can open them, on my laptop | Kept 30 days. Only the product and technical team can open them |
+| Run files | The runs folder | Yes | Kept until I submit. Only me | Kept 30 days. Only the product and technical team |
+| The action log | The database | Yes | Reset before each test run. The Toolbox writes to it, and I can read it | Kept as long as order records. Staff who act on requests can read it |
 
 If an order changes after a memory was saved, the database wins. Each memory is shown to the agent with the date it was saved (Mem0 already records this), and the agent's instructions say order facts come from the tools. If a memory and the database disagree, for example a cancel the customer asked for last week that never happened, the agent answers from the database, mentions the earlier request and when it was made, and logs a new request so someone follows it up. The agent can't read the action log itself, so it only spots this through memory.
 
