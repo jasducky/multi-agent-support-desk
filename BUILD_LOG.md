@@ -132,7 +132,7 @@ Agent: Order 5 was not found on your account.
 ## Stage 5: one trace per turn
 - **I decided (what goes in span attributes, who can see Phoenix):** I record everything: the message, the conversation, tool calls and results, times, tokens, the model and the prompt version. Messages can hold personal details like a phone number. I need to see them to check the mask step hid them in the reply, so I limit who can open traces rather than hiding the data. The exception is card numbers, which are removed before anything is recorded. Here Phoenix runs only on my laptop. In a real shop, only named engineers behind a login could open it. The spec asks for the same.
 - **Trace id:** `67285d8bde91b4d77810d054bca73846`
-- **One thing the trace showed that the reply didn't:** Alice's card number, from her message, was removed before anything was recorded. The trace also showed where the time went: of 2.5 seconds, the two model calls took 1.7, the database 10 milliseconds, and the rest was the agent framework's own work.
+- **One thing the trace showed that the reply didn't:** Alice's card number, from her message, was removed before anything was recorded. The trace also showed where the time went: of 2.5 seconds, the two model calls took 1.7 and the database 10 milliseconds. The other 0.8 seconds isn't shown as a step. By subtracting, most of it is Google ADK's own work between steps, as it sits inside ADK's agent span.
 
 ```text
 agent.turn                                           CHAIN        2501 ms
