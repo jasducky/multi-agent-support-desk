@@ -6,6 +6,7 @@
 #   ./run.sh toolbox  start the MCP Toolbox (the database tools) on port 5001
 #   ./run.sh start    start the background services (Toolbox, Phoenix, Judge, Masker); logs in .run/
 #   ./run.sh stop     stop them
+#   ./run.sh status   is every service up? (Definition of Done line 1)
 #   ./run.sh chat     the chat in the terminal (needs the services running)
 #   ./run.sh web      the web page and API on http://localhost:8000 (needs the services running)
 #   ./run.sh review   the eval review page on http://localhost:8001 (reads reports/ and Phoenix)
@@ -83,6 +84,20 @@ case "${1:-}" in
     start_bg masker 10003 .venv/bin/uvicorn guards.masker:app --host 127.0.0.1 --port 10003
     # W-1: the web page and API (Stage 9), last because it connects to all of the above.
     start_bg web 8000 .venv/bin/uvicorn support.web:app --host 127.0.0.1 --port 8000
+    ;;
+  status)
+    # Definition of Done line 1: is every service up? Exit 0 only if all of them are.
+    down=0
+    if psql -d "$DB" -tAc "SELECT 1" >/dev/null 2>&1; then echo "database: up ($DB)"
+    else echo "database: DOWN ($DB)"; down=1; fi
+    for pair in toolbox:5001 phoenix:6006 judge:10002 masker:10003 web:8000; do
+      name=${pair%%:*} port=${pair##*:}
+      if lsof -ti "tcp:$port" >/dev/null; then echo "$name: up on port $port"
+      else echo "$name: DOWN (port $port)"; down=1; fi
+    done
+    # The review page is a tool for reading eval runs, not part of the agent: shown, not counted.
+    lsof -ti tcp:8001 >/dev/null && echo "(review page: up on port 8001)" || echo "(review page: off)"
+    [ $down -eq 0 ] && echo "all services up" || { echo "some services are down: ./run.sh start"; exit 1; }
     ;;
   stop)
     for pair in web:8000 toolbox:5001 phoenix:6006 judge:10002 masker:10003; do
@@ -238,7 +253,7 @@ case "${1:-}" in
     esac
     ;;
   *)
-    echo "usage: ./run.sh setup | reset | start | stop | toolbox | chat | web | review | check N" >&2
+    echo "usage: ./run.sh setup | reset | start | stop | status | toolbox | chat | web | review | check N" >&2
     exit 1
     ;;
 esac
