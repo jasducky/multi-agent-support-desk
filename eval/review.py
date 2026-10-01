@@ -61,6 +61,7 @@ async def items(run: str = "run1"):
         out.append({"id": i["id"], "set": i["set"], "user": i["user"], "pass": i.get("pass"),
                     "why": i.get("why"), "terminated": i["terminated"], "blocked_at": i["blocked_at"],
                     "ms": i["ms"], "trace_id": i["trace_id"],
+                    "question": row.get("message") or row.get("ask") or "",
                     "expected": EXPECTED[i["set"]](row) if row else ""})
     return out
 

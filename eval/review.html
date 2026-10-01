@@ -42,6 +42,12 @@
   .notes label { font-size:13px; color:var(--muted); display:block; margin:6px 0 3px; }
   .saved { font-size:13px; color:var(--pass); min-height:1.2em; }
   .muted { color:var(--muted); }
+  .chat { display:flex; flex-direction:column; gap:8px; }
+  .bubble { max-width:80%; padding:9px 13px; border-radius:12px; white-space:pre-wrap; }
+  .bubble.you { background:var(--ink); color:#fff; align-self:flex-end; border-bottom-right-radius:4px; }
+  .bubble.bot { background:var(--panel); border:1px solid var(--line); align-self:flex-start; border-bottom-left-radius:4px; }
+  .who { font-size:12px; color:var(--muted); }
+  .who.you { align-self:flex-end; }
   .steps { display:flex; gap:6px; }
   .steps button.on { background:var(--ink); color:#fff; border-color:var(--ink); }
   .help { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:10px 14px; margin-bottom:14px; font-size:14px; }
@@ -102,10 +108,10 @@ function drawAxial() {
   const labels = [...new Set(Object.values(notes).map(n => n.type).filter(Boolean))].sort();
   const dl = el("datalist"); dl.id = "labels"; labels.forEach(l => { const o = el("option"); o.value = l; dl.append(o); });
   const t = el("table");
-  const h = el("tr"); ["Item", "Why it failed", "Your open code", "Failure type"].forEach(c => h.append(el("th", "", c))); t.append(h);
+  const h = el("tr"); ["Item", "Customer asked", "Why it failed", "Your open code", "Failure type"].forEach(c => h.append(el("th", "", c))); t.append(h);
   for (const i of reviewed()) {
     const tr = el("tr");
-    tr.append(el("td", "", `${i.id} (${i.set})`), el("td", "", i.pass ? "passed" : (i.why || "")),
+    tr.append(el("td", "", `${i.id} (${i.set})`), el("td", "", i.question || ""), el("td", "", i.pass ? "passed" : (i.why || "")),
               el("td", "code", notes[i.id]?.note || "(no open code yet)"));
     const td = el("td"); const inp = el("input"); inp.setAttribute("list", "labels"); inp.value = notes[i.id]?.type || "";
     inp.onblur = async () => { await saveNote(i.id, notes[i.id]?.note || "", inp.value.trim()); };
@@ -170,7 +176,10 @@ async function show(i) {
   parts.push(card("Result", res, row("Expected", document.createTextNode(i.expected)),
                   row("Why it failed", document.createTextNode(i.pass ? "-" : (i.why || "")))));
 
-  parts.push(card("Customer asked", el("div", "q", t.question || "")));
+  const chat = el("div", "chat");
+  chat.append(el("div", "who you", `${i.user} (customer)`), el("div", "bubble you", t.question || ""),
+              el("div", "who", "support agent"), el("div", "bubble bot", t.reply || "(no reply)"));
+  parts.push(card("The conversation, as the customer saw it", chat));
 
   const g = el("div");
   t.guards.forEach(x => g.append(row(x.name, document.createTextNode(typeof x.verdict === "object" ? JSON.stringify(x.verdict) : x.verdict))));
@@ -191,7 +200,6 @@ async function show(i) {
   });
   parts.push(card("Tools", tl));
 
-  parts.push(card("Reply the customer saw", el("div", "r", t.reply || "")));
   if (t.errors.length) parts.push(card("Errors", el("div", "", t.errors.join("\n"))));
 
   const n = el("div");
