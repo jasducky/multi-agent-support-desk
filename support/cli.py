@@ -11,6 +11,7 @@ import asyncio
 import getpass
 import json
 import sys
+import urllib.request
 
 from dotenv import load_dotenv
 
@@ -27,7 +28,7 @@ def render(event: dict) -> str | None:
     """One readable line per event, in the style sketched in BUILD_LOG Stage 4."""
     kind = event["type"]
     if kind == "trace":
-        return f"  trace        {event['url'] or '(tracing arrives in Stage 5)'}"
+        return None  # printed after the turn instead (O-5)
     if kind == "stage":
         return None  # its step line says how it went
     if kind == "step":
@@ -58,6 +59,21 @@ def render(event: dict) -> str | None:
     return json.dumps(event)
 
 
+# C-4: name the missing service instead of failing halfway through a turn.
+SERVICES = {"Toolbox (./run.sh start)": "http://127.0.0.1:5001",
+            "Phoenix (./run.sh start)": "http://localhost:6006/healthz"}
+
+
+def missing_services() -> list[str]:
+    down = []
+    for name, url in SERVICES.items():
+        try:
+            urllib.request.urlopen(url, timeout=2)
+        except OSError:
+            down.append(name)
+    return down
+
+
 async def main() -> None:
     parser = argparse.ArgumentParser(description="Customer support chat")
     parser.add_argument("--user", help="email (otherwise asked)")
@@ -65,6 +81,9 @@ async def main() -> None:
     parser.add_argument("--events", action="store_true", help="print raw NDJSON events only")
     args = parser.parse_args()
     load_dotenv()
+    if down := missing_services():
+        print("Not running: " + ", ".join(down), file=sys.stderr)
+        sys.exit(1)
 
     async with SupportPipeline() as pipeline:
         email = args.user or input("Email: ")
@@ -87,11 +106,17 @@ async def main() -> None:
                 break
             if not text:
                 continue
+            url = None
             async for event in pipeline.turn(user["user_id"], text):
                 if args.events:
                     print(json.dumps(event), flush=True)
-                elif (shown := render(event)) is not None:
+                    continue
+                if event["type"] == "trace":
+                    url = event["url"]
+                if (shown := render(event)) is not None:
                     print(shown, flush=True)
+            if url and not args.events:
+                print(f"  trace        {url}")
 
 
 if __name__ == "__main__":

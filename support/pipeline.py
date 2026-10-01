@@ -18,9 +18,13 @@ import yaml
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
+from opentelemetry import context as otel_context
+from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
 from toolbox_core import ToolboxClient
 
-from support.agent import MODEL, build_agent
+from support import telemetry
+from support.agent import MODEL, PROMPT_VERSION, build_agent
 
 # ADK announces that it describes tools to Gemini in a newer, "experimental" way. Harmless.
 warnings.filterwarnings("ignore", message=r".*\[EXPERIMENTAL\].*")
@@ -68,6 +72,7 @@ class SupportPipeline:
     """Holds the Toolbox connection and one agent session per logged-in customer."""
 
     def __init__(self, toolbox_url: str = TOOLBOX_URL):
+        self._tracer = telemetry.set_up()  # before any agent is built (Stage 5)
         self._toolbox = ToolboxClient(toolbox_url)
         self._sessions = InMemorySessionService()
         self._runners: dict[str, tuple[Runner, str]] = {}  # email -> (runner, session id)
@@ -108,11 +113,29 @@ class SupportPipeline:
             "tokens": {"in": 0, "out": 0}, "steps": [], "tool_calls": [], "llm_calls": 0,
         }
 
+        # O-2: one root span per turn; everything below runs inside it, so ADK's invoke_agent,
+        # call_llm and execute_tool spans become its children.
+        span = self._tracer.start_span("agent.turn", attributes={
+            "openinference.span.kind": "CHAIN", "input.value": message, "user.id": email,
+            "session.id": session_id, "metadata": json.dumps({"prompt_version": PROMPT_VERSION}),
+        })
+        token = otel_context.attach(trace.set_span_in_context(span))
+        try:
+            async for event in self._run_turn(runner, session_id, email, message, turn_id,
+                                              started, record, span):
+                yield event
+        finally:
+            otel_context.detach(token)
+            span.end()
+
+    async def _run_turn(self, runner, session_id, email, message, turn_id, started, record, span):
         def ms_since(t: float) -> int:
             return round((time.monotonic() - t) * 1000)
 
-        # Placeholder until Stage 5 adds tracing.
-        yield {"type": "trace", "turn_id": turn_id, "trace_id": None, "url": None}
+        trace_id = format(span.get_span_context().trace_id, "032x")
+        record["trace_id"] = trace_id
+        yield {"type": "trace", "turn_id": turn_id, "trace_id": trace_id,
+               "url": telemetry.trace_url(trace_id)}
 
         yield {"type": "stage", "key": "agent", "label": "Support agent (ADK, tools over MCP)"}
         agent_started = last_llm_start = time.monotonic()
@@ -172,6 +195,8 @@ class SupportPipeline:
                     response = "".join(p.text or "" for p in event.content.parts if p.text)
 
         except Exception as exc:  # fail loud: the turn ends with an error naming the step
+            span.set_status(Status(StatusCode.ERROR, str(exc)))
+            span.record_exception(exc)
             record.update(terminated="error", wall_clock_ms=ms_since(started))
             self._write_run(record)
             yield {"type": "error", "step": "agent", "status": 502,
@@ -181,6 +206,7 @@ class SupportPipeline:
         yield {"type": "step", "key": "agent", "status": "passed", "detail": "answered",
                "ms": ms_since(agent_started), "span": "invoke_agent", "kind": "in-process"}
 
+        span.set_attribute("output.value", response)
         record.update(terminated="done", wall_clock_ms=ms_since(started))
         self._write_run(record)
         yield {"type": "final", "blocked": False, "blocked_at": None, "response": response,

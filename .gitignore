@@ -8,3 +8,7 @@ reports/
 # Python
 __pycache__/
 .venv/
+
+# Local service data and logs
+.phoenix/
+.run/

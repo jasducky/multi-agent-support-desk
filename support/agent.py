@@ -3,6 +3,7 @@
 from google.adk.agents import LlmAgent
 
 MODEL = "gemini-2.5-flash"
+PROMPT_VERSION = "support-v2"  # recorded on every trace; bump when INSTRUCTION changes
 
 INSTRUCTION = """\
 You are the customer support assistant for an online shop that sells office, tech and home

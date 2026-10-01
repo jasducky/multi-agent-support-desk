@@ -131,8 +131,24 @@ Agent: Order 5 was not found on your account.
 
 ## Stage 5: one trace per turn
 - **I decided (what goes in span attributes, who can see Phoenix):** I record everything: the message, the conversation, tool calls and results, times, tokens, the model and the prompt version. Messages can hold personal details like a phone number. I need to see them to check the mask step hid them in the reply, so I limit who can open traces rather than hiding the data. The exception is card numbers, which are removed before anything is recorded. Here Phoenix runs only on my laptop. In a real shop, only named engineers behind a login could open it. The spec asks for the same.
-- **Trace id:**
-- **One thing the trace showed that the reply didn't:**
+- **Trace id:** `67285d8bde91b4d77810d054bca73846`
+- **One thing the trace showed that the reply didn't:** Alice's card number, from her message, was removed before anything was recorded. The trace also showed where the time went: of 2.5 seconds, the two model calls took 1.7, the database 10 milliseconds, and the rest was the agent framework's own work.
+
+```text
+agent.turn                                           CHAIN        2501 ms
+    └─ invocation                                    UNKNOWN      2423 ms
+        └─ invoke_agent support_agent                AGENT        2408 ms
+            └─ call_llm                              LLM          1041 ms
+                └─ generate_content gemini-2.5-flash LLM          1030 ms
+                    └─ AsyncGenerateContent          LLM           999 ms
+            └─ execute_tool get-order-status         TOOL           10 ms
+            └─ call_llm                              LLM           688 ms
+                └─ generate_content gemini-2.5-flash LLM           687 ms
+                    └─ AsyncGenerateContent          LLM           686 ms
+
+Phoenix holds 10 spans for trace 67285d8bde91b4d77810d054bca73846  (read after the CLI had closed)
+agent.turn input: "What is the status of order 3? My card is [card number removed] if you need it."
+```
 
 ## Stage 6: Sanitizer and Security Judge
 - **I decided (who may block, which A2A method):** The Judge works in two steps, and either step can block.
