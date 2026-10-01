@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Eval review</title>
+<style>
+  :root { --bg:#f6f5f2; --panel:#fff; --ink:#1d1d1b; --muted:#6b6a66; --line:#e3e1db;
+          --pass:#2f7d4f; --fail:#b3261e; --tool:#2b5fa8; --chip:#f0eee8; --note:#fffbea; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+  header { display:flex; gap:16px; align-items:center; padding:12px 20px; background:var(--panel); border-bottom:1px solid var(--line); }
+  header h1 { font-size:17px; margin:0; }
+  header .count { color:var(--muted); font-size:14px; margin-left:auto; }
+  select, button { font:inherit; padding:5px 10px; border:1px solid var(--line); border-radius:8px; background:var(--panel); }
+  main { display:grid; grid-template-columns:330px 1fr; height:calc(100vh - 55px); }
+  #list { overflow-y:auto; border-right:1px solid var(--line); background:var(--panel); }
+  .it { padding:9px 14px; border-bottom:1px solid var(--line); cursor:pointer; }
+  .it:hover { background:var(--bg); } .it.on { background:#ece9e1; }
+  .it .top { display:flex; gap:8px; align-items:baseline; }
+  .it .id { font-weight:700; } .it .set { color:var(--muted); font-size:13px; }
+  .it .why { font-size:13px; color:var(--muted); }
+  .it .noted { margin-left:auto; font-size:12px; color:var(--pass); }
+  .fail .id { color:var(--fail); } .ok .id { color:var(--pass); }
+  #detail { overflow-y:auto; padding:18px 24px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; margin-bottom:14px; }
+  .card h3 { margin:0; padding:9px 14px; font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); border-bottom:1px solid var(--line); }
+  .card .body { padding:10px 14px; }
+  .q { font-size:17px; font-weight:600; } .r { white-space:pre-wrap; }
+  .result { font-weight:600; } .result.fail { color:var(--fail); } .result.ok { color:var(--pass); }
+  .row { display:grid; grid-template-columns:110px 1fr; gap:10px; padding:5px 0; border-bottom:1px solid var(--line); }
+  .row:last-child { border-bottom:0; } .k { color:var(--muted); font-weight:600; }
+  .used { color:var(--pass); } .skipped { color:var(--muted); }
+  .tool .k { color:var(--tool); }
+  table { border-collapse:collapse; font-size:13px; margin-top:4px; }
+  th, td { border:1px solid var(--line); padding:3px 8px; text-align:left; vertical-align:top; }
+  th { background:var(--chip); }
+  code { background:var(--chip); padding:1px 5px; border-radius:4px; font-size:13px; }
+  .notes { background:var(--note); }
+  .notes textarea, .notes input { width:100%; font:inherit; padding:8px; border:1px solid var(--line); border-radius:8px; }
+  .notes textarea { min-height:70px; }
+  .notes label { font-size:13px; color:var(--muted); display:block; margin:6px 0 3px; }
+  .saved { font-size:13px; color:var(--pass); min-height:1.2em; }
+  .muted { color:var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Eval review</h1>
+  <select id="run"></select>
+  <select id="show"><option value="failing">Failing only</option><option value="all">All items</option></select>
+  <span class="count" id="count"></span>
+</header>
+<main>
+  <nav id="list"></nav>
+  <section id="detail"><p class="muted">Pick an item on the left.</p></section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+let items = [], notes = {}, current = null;
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+
+async function load() {
+  const run = $("run").value;
+  items = await (await fetch(`/api/items?run=${run}`)).json();
+  notes = await (await fetch(`/api/notes?run=${run}`)).json();
+  drawList();
+}
+
+function drawList() {
+  const shown = items.filter(i => $("show").value === "all" || !i.pass);
+  $("count").textContent = `${shown.length} shown · ${items.filter(i => !i.pass).length} failing of ${items.length} · ${Object.keys(notes).filter(k => notes[k].note).length} noted`;
+  $("list").replaceChildren(...shown.map(i => {
+    const d = el("div", "it " + (i.pass ? "ok" : "fail") + (current === i.id ? " on" : ""));
+    const top = el("div", "top");
+    top.append(el("span", "id", i.id), el("span", "set", i.set));
+    if (notes[i.id]?.note) top.append(el("span", "noted", "✓ noted"));
+    d.append(top, el("div", "why", i.pass ? "passed" : (i.why || "failed")));
+    d.onclick = () => show(i);
+    return d;
+  }));
+}
+
+function table(rows) {
+  if (!Array.isArray(rows)) rows = [rows];
+  if (!rows.length || typeof rows[0] !== "object" || rows[0] === null) return el("code", "", JSON.stringify(rows));
+  const cols = [...new Set(rows.flatMap(Object.keys))];
+  const t = el("table"); const h = el("tr"); cols.forEach(c => h.append(el("th", "", c))); t.append(h);
+  rows.forEach(r => { const tr = el("tr"); cols.forEach(c => tr.append(el("td", "", typeof r[c] === "object" ? JSON.stringify(r[c]) : String(r[c] ?? "")))); t.append(tr); });
+  return t;
+}
+
+function card(title, ...children) {
+  const c = el("div", "card"); c.append(el("h3", "", title));
+  const b = el("div", "body"); b.append(...children); c.append(b); return c;
+}
+
+function row(k, v, cls) { const r = el("div", "row " + (cls || "")); r.append(el("span", "k", k)); const d = el("div"); d.append(v); r.append(d); return r; }
+
+async function show(i) {
+  current = i.id; drawList();
+  $("detail").replaceChildren(el("p", "muted", "Loading the trace from Phoenix..."));
+  const t = await (await fetch(`/api/trace/${i.trace_id}`)).json();
+  const parts = [];
+
+  const res = el("div");
+  res.append(el("span", "result " + (i.pass ? "ok" : "fail"), i.pass ? "PASSED" : "FAILED"),
+             document.createTextNode(`  ·  ${i.set} ${i.id}  ·  customer: ${i.user}  ·  ${(i.ms / 1000).toFixed(1)}s`));
+  parts.push(card("Result", res, row("Expected", document.createTextNode(i.expected)),
+                  row("Why it failed", document.createTextNode(i.pass ? "-" : (i.why || "")))));
+
+  parts.push(card("Customer asked", el("div", "q", t.question || "")));
+
+  const g = el("div");
+  t.guards.forEach(x => g.append(row(x.name, document.createTextNode(typeof x.verdict === "object" ? JSON.stringify(x.verdict) : x.verdict))));
+  if (!t.guards.length) g.append(el("span", "muted", "no guard spans"));
+  parts.push(card("Guards", g));
+
+  const m = el("div");
+  if (!t.recall.length) m.append(el("span", "muted", "no memories found"));
+  t.recall.forEach(x => m.append(row(x.score.toFixed(2), el("span", x.used ? "used" : "skipped", `${x.used ? "USED" : "skipped"} · "${x.memory}"`))));
+  parts.push(card("Memories (cut-off 0.25)", m));
+
+  const tl = el("div");
+  tl.append(el("div", "muted", `Gemini was asked ${t.llm_calls} time${t.llm_calls === 1 ? "" : "s"} by the support agent.`));
+  if (!t.tools.length) tl.append(el("div", "", "No tools were called."));
+  t.tools.forEach((x, n) => {
+    const v = el("div"); v.append(el("div", "", "sent: "), el("code", "", JSON.stringify(x.args)), el("div", "", "came back:"), table(x.result));
+    tl.append(row(`${n + 1}. ${x.name}`, v, "tool"));
+  });
+  parts.push(card("Tools", tl));
+
+  parts.push(card("Reply the customer saw", el("div", "r", t.reply || "")));
+  if (t.errors.length) parts.push(card("Errors", el("div", "", t.errors.join("\n"))));
+
+  const n = el("div");
+  const note = el("textarea"); note.value = notes[i.id]?.note || "";
+  note.placeholder = "In your own words: what went wrong (or right) in this turn?";
+  const type = el("input"); type.value = notes[i.id]?.type || "";
+  type.placeholder = "Failure type, a short label you reuse across items, e.g. 'asked instead of looking up'";
+  const saved = el("div", "saved");
+  async function save() {
+    await fetch(`/api/notes?run=${$("run").value}`, { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: i.id, note: note.value, type: type.value }) });
+    notes[i.id] = { note: note.value, type: type.value }; saved.textContent = "Saved"; drawList();
+  }
+  note.onblur = save; type.onblur = save;
+  n.append(el("label", "", "What went wrong"), note, el("label", "", "Failure type"), type, saved);
+  const nc = card("Your notes", n); nc.classList.add("notes"); parts.push(nc);
+
+  $("detail").replaceChildren(...parts);
+}
+
+(async () => {
+  const runs = await (await fetch("/api/runs")).json();
+  $("run").replaceChildren(...runs.map(r => { const o = el("option", "", `${r.run} · ${r.ran_at.slice(0, 16).replace("T", " ")}`); o.value = r.run; return o; }));
+  $("run").onchange = () => { current = null; load(); };
+  $("show").onchange = drawList;
+  load();
+})();
+</script>
+</body>
+</html>

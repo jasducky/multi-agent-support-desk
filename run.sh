@@ -8,6 +8,7 @@
 #   ./run.sh stop     stop them
 #   ./run.sh chat     the chat in the terminal (needs the services running)
 #   ./run.sh web      the web page and API on http://localhost:8000 (needs the services running)
+#   ./run.sh review   the eval review page on http://localhost:8001 (reads reports/ and Phoenix)
 #   ./run.sh check N  run stage N's "Prove it" next to the prediction in BUILD_LOG.md
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -93,6 +94,10 @@ case "${1:-}" in
     ;;
   chat)
     exec .venv/bin/python -m support.cli
+    ;;
+  review)
+    # Stage 10: the error-analysis review page for eval runs, http://localhost:8001. Until Ctrl+C.
+    exec .venv/bin/uvicorn eval.review:app --host 127.0.0.1 --port 8001
     ;;
   web)
     # Stage 9: the web UI and API on http://localhost:8000 (W-1). Runs until Ctrl+C.
@@ -233,7 +238,7 @@ case "${1:-}" in
     esac
     ;;
   *)
-    echo "usage: ./run.sh setup | reset | start | stop | toolbox | chat | web | check N" >&2
+    echo "usage: ./run.sh setup | reset | start | stop | toolbox | chat | web | review | check N" >&2
     exit 1
     ;;
 esac
