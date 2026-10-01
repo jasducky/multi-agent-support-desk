@@ -74,6 +74,7 @@ If an order changes after a memory was saved, the database wins. Each memory is 
 
 - **Masking (Stages 8 and 9).** Saw: a customer gave a neighbour's phone number and email. They were kept in plain text in memory, the traces and the action log, and showed on the steps page. The Masker only checks the reply, and saving only removes card numbers. Change: remove phone numbers and other people's emails before anything is saved, as we do for card numbers.
 - **Memory (Stage 9).** Saw: every question is saved as a memory too, such as "User asked for the status of order 3". Memory fills with questions as well as facts. Change: check in Stage 10 whether these push out real facts. If they do, save only facts.
+- **Time limit (Stage 10).** Saw: nothing stops a turn that runs past 30 seconds, so a slow turn is never marked as over its limit. Change: if a turn in the eval goes past 30 seconds, end it there and mark it as over the limit.
 - **Cut-off (Stage 8).** Saw: my planted memory scored 0.26, only just above the 0.25 cut-off. Change: none yet. I'll look at the memory results in Stage 10 before moving it.
 
 ## Trade-offs
