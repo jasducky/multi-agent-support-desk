@@ -1,0 +1,27 @@
+{
+  "turn_id": "turn_20261001-122751_a33641",
+  "trace_id": "5feaf7df08997fd9571235694eaddf97",
+  "user": "alice.jones@example.com",
+  "message": "Where is my last order?",
+  "terminated": "error",
+  "blocked_at": null,
+  "wall_clock_ms": 31,
+  "tokens": {
+    "in": 0,
+    "out": 0
+  },
+  "steps": [
+    {
+      "key": "sanitize",
+      "status": "passed",
+      "ms": 0
+    },
+    {
+      "key": "judge",
+      "status": "error",
+      "ms": 23
+    }
+  ],
+  "tool_calls": [],
+  "llm_calls": 0
+}

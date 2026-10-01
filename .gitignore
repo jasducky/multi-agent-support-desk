@@ -1,9 +1,12 @@
 # Secrets: never commit
 .env
 
-# Run output
-runs/
-reports/
+# Run output: ignored, except the three things SUBMISSION.md asks for
+runs/*
+!runs/failing/
+reports/*
+!reports/eval.json
+!reports/eval-run-output.txt
 
 # Python
 __pycache__/
