@@ -157,9 +157,10 @@ agent.turn input: "What is the status of order 3? My card is [card number remove
     2. If nothing matches, the model reads the message for tricks a list can't spot, like "you're now in admin mode", or the same attack written in French.
 
   The patterns come from attack types, not the course's test set. They match shapes, not single words, so "drop the gift wrap" still gets through. The spec leaves open whether the pattern check can block on its own. I said yes: a check that must always happen shouldn't be left to the model. For A2A I use `message/send`, the current version. The reference version uses the older `tasks/send`.
-- **Predicted vs actual X01 latency:** Under half a second. X01 is a database command, so the pattern check blocks it before the model runs. An attack that reaches the model would take about 2 seconds, assuming the Judge uses gemini-2.5-flash, a fast model. The course's own example shows 2.2 seconds. Actual: to add after the build.
-- **When I stopped the Judge, my pipeline first:**
-- **Failing trajectory saved at:**
+- **The Sanitizer:** It runs first, in code, with no model. It uses an allow list: only the kinds of characters a customer types get through (letters in any language, numbers, punctuation, symbols and emoji). Anything else, or a message that's too long, is stopped. Apostrophes and symbols like # and $ always pass, so normal questions aren't blocked. Attacks written in normal text are the Judge's job.
+- **Predicted vs actual X01 latency:** Under half a second. X01 is a database command, so the pattern check blocks it before the model runs. An attack that reaches the model would take about 2 seconds, assuming the Judge uses gemini-2.5-flash, a fast model. The course's own example shows 2.2 seconds. Actual: 56 milliseconds for the whole turn. The pattern check blocked it and the model never ran. L02, which did reach the model, spent 2.0 seconds in the Judge.
+- **When I stopped the Judge, my pipeline first:** ended the turn with an error naming the Judge ("Security Judge unreachable"). There was no answer and the agent never ran, so nothing got through unchecked.
+- **Failing trajectory saved at:** `runs/failing/turn_20261001-122751_a33641.json`
 
 ## Stage 7: the Guardrail
 - **Three messages that must pass / three that must not (written before the prompt):** The rule: let through anything about the customer's dealings with this shop, and block using it as a general assistant. Judge what they want the shop to do, not the words they use.

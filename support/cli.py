@@ -10,6 +10,7 @@ import argparse
 import asyncio
 import getpass
 import json
+import os
 import sys
 import urllib.request
 
@@ -61,7 +62,8 @@ def render(event: dict) -> str | None:
 
 # C-4: name the missing service instead of failing halfway through a turn.
 SERVICES = {"Toolbox (./run.sh start)": "http://127.0.0.1:5001",
-            "Phoenix (./run.sh start)": "http://localhost:6006/healthz"}
+            "Phoenix (./run.sh start)": "http://localhost:6006/healthz",
+            "Security Judge (./run.sh start)": "http://127.0.0.1:10002/.well-known/agent-card.json"}
 
 
 def missing_services() -> list[str]:
@@ -81,7 +83,7 @@ async def main() -> None:
     parser.add_argument("--events", action="store_true", help="print raw NDJSON events only")
     args = parser.parse_args()
     load_dotenv()
-    if down := missing_services():
+    if not os.environ.get("SKIP_SERVICE_CHECK") and (down := missing_services()):
         print("Not running: " + ", ".join(down), file=sys.stderr)
         sys.exit(1)
 

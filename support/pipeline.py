@@ -3,8 +3,9 @@
 The CLI and the web server only render what this yields. Each turn also writes
 runs/<turn_id>.json (EVALS 4.1) before its last event.
 
-So far the turn has one step, `agent`. Later stages add sanitize, judge, guardrail, recall,
-mask and save around it, in the order P-2 fixes.
+Steps so far, in the order P-2 fixes: sanitize -> judge -> agent. Stages 7 and 8 add
+guardrail, recall, mask and save. A block ends the turn at once (P-3); a guard that fails ends
+it with an error naming the step, never with "allow" (P-4).
 """
 
 import json
@@ -14,6 +15,7 @@ import warnings
 from collections.abc import AsyncIterator
 from pathlib import Path
 
+import httpx
 import yaml
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
@@ -23,6 +25,7 @@ from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
 from toolbox_core import ToolboxClient
 
+from guards import sanitizer
 from support import telemetry
 from support.agent import MODEL, PROMPT_VERSION, build_agent
 
@@ -33,6 +36,37 @@ ROOT = Path(__file__).resolve().parent.parent
 TOOLBOX_URL = "http://127.0.0.1:5001"
 APP_NAME = "customer_support"
 BOUND = ("customer_email", "user_email")  # filled in from the log-in, never by the model (M-5)
+JUDGE_URL = "http://127.0.0.1:10002/"
+JUDGE_TIMEOUT_S = 15
+BLOCKED_REPLY = "Sorry, I can't help with that message. I can help with your orders, deliveries, returns and account."
+
+
+class GuardError(Exception):
+    """A guard could not give a verdict: unreachable, timed out, or an answer we can't read."""
+
+
+async def ask_judge(message: str) -> tuple[str, str]:
+    """One A2A `message/send` call to the Security Judge (J-1). Returns (verdict, reason)."""
+    request = {
+        "jsonrpc": "2.0", "id": uuid.uuid4().hex, "method": "message/send",
+        "params": {"message": {"role": "user", "messageId": uuid.uuid4().hex,
+                               "parts": [{"kind": "text", "text": message}]}},
+    }
+    try:
+        async with httpx.AsyncClient(timeout=JUDGE_TIMEOUT_S) as client:
+            reply = (await client.post(JUDGE_URL, json=request)).json()
+    except httpx.TimeoutException:
+        raise GuardError(f"Security Judge timed out after {JUDGE_TIMEOUT_S}s")
+    except (httpx.HTTPError, ValueError) as exc:
+        raise GuardError(f"Security Judge unreachable: {type(exc).__name__}: {exc}")
+    try:
+        text = reply["result"]["artifacts"][-1]["parts"][0]["text"]
+        verdict = json.loads(text.strip().removeprefix("```json").removesuffix("```"))
+        if verdict["verdict"] not in ("allow", "block") or not verdict.get("reason"):
+            raise ValueError(verdict)
+    except (KeyError, IndexError, TypeError, ValueError) as exc:
+        raise GuardError(f"Security Judge gave no readable verdict: {str(reply)[:200]}") from exc
+    return verdict["verdict"], verdict["reason"]
 
 
 def _tool_info() -> dict:
@@ -137,6 +171,65 @@ class SupportPipeline:
         yield {"type": "trace", "turn_id": turn_id, "trace_id": trace_id,
                "url": telemetry.trace_url(trace_id)}
 
+        def finish(status: str, key: str | None = None, error: str | None = None) -> list[dict]:
+            """The turn's last event, after writing its run file. Blocked and error turns."""
+            record.update(terminated=status, blocked_at=key if status == "blocked" else None,
+                          wall_clock_ms=ms_since(started))
+            self._write_run(record)
+            if status == "error":
+                span.set_status(Status(StatusCode.ERROR, error))
+                return [{"type": "error", "step": key, "status": 502, "error": error,
+                         "terminated": "error"}]
+            span.set_attribute("output.value", BLOCKED_REPLY)
+            return [{"type": "final", "blocked": True, "blocked_at": key,
+                     "response": BLOCKED_REPLY, "terminated": "blocked",
+                     "wall_clock_ms": record["wall_clock_ms"], "tokens": record["tokens"]}]
+
+        def step(key: str, passed: bool, detail: str, ms: int, span_name: str, kind: str) -> dict:
+            status = "passed" if passed else "blocked"
+            record["steps"].append({"key": key, "status": status, "ms": ms})
+            return {"type": "step", "key": key, "status": status, "detail": detail, "ms": ms,
+                    "span": span_name, "kind": kind}
+
+        # 1. Sanitizer: in-process code, no model (S-1).
+        yield {"type": "stage", "key": "sanitize", "label": "Sanitizer"}
+        t = time.monotonic()
+        with self._tracer.start_as_current_span("security.sanitize", attributes={
+                "openinference.span.kind": "GUARDRAIL", "input.value": message}) as s:
+            passed, detail = sanitizer.check(message)
+            s.set_attribute("output.value", ("pass: " if passed else "block: ") + detail)
+        yield step("sanitize", passed, detail, ms_since(t), "security.sanitize", "Python fn")
+        if not passed:
+            for e in finish("blocked", "sanitize"):
+                yield e
+            return
+
+        # 2. Security Judge: its own service, over A2A (J-1 to J-4).
+        yield {"type": "stage", "key": "judge", "label": "A2A Security Judge"}
+        t = time.monotonic()
+        with self._tracer.start_as_current_span("security.a2a_judge", attributes={
+                "openinference.span.kind": "GUARDRAIL", "input.value": message}) as s:
+            try:
+                verdict, reason = await ask_judge(message)
+                s.set_attribute("output.value", json.dumps({"verdict": verdict, "reason": reason}))
+                failure = None
+            except GuardError as exc:
+                s.set_status(Status(StatusCode.ERROR, str(exc)))
+                s.record_exception(exc)
+                failure = str(exc)
+        if failure:
+            record["steps"].append({"key": "judge", "status": "error", "ms": ms_since(t)})
+            for e in finish("error", "judge", failure):
+                yield e
+            return
+        yield step("judge", verdict == "allow", f"{verdict}: {reason}", ms_since(t),
+                   "security.a2a_judge", "A2A")
+        if verdict == "block":
+            for e in finish("blocked", "judge"):
+                yield e
+            return
+
+        # 3. The support agent.
         yield {"type": "stage", "key": "agent", "label": "Support agent (ADK, tools over MCP)"}
         agent_started = last_llm_start = time.monotonic()
         call_ids: dict[str, tuple[int, float]] = {}  # ADK's call id -> (our id, when it was called)
