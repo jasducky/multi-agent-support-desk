@@ -156,7 +156,30 @@ class SupportPipeline:
         session = await self._sessions.create_session(app_name=APP_NAME, user_id=email)
         runner = Runner(agent=build_agent(tools), app_name=APP_NAME, session_service=self._sessions)
         self._runners[email] = (runner, session.id)
-        return {"user_id": email, "full_name": found["full_name"]}
+        return {"user_id": email, "full_name": found["full_name"],
+                "is_premium": bool(found.get("is_premium"))}
+
+    def is_logged_in(self, email: str) -> bool:
+        return email in self._runners
+
+    def log_out(self, email: str) -> None:
+        self._runners.pop(email, None)
+
+    async def db_ok(self) -> str:
+        """For /health: a log-in check with no real customer reaches the database, returns nothing."""
+        try:
+            check_login = await self._toolbox.load_tool("check-login")
+            await check_login(email="health@check.invalid", password="-")
+            return "ok"
+        except Exception as e:  # noqa: BLE001 - /health reports any failure as a string
+            return f"error: {type(e).__name__}"
+
+    async def mem0_ok(self) -> str:
+        try:
+            await self._memory.all("health@check.invalid")
+            return "ok"
+        except Exception as e:  # noqa: BLE001
+            return f"error: {type(e).__name__}"
 
     async def turn(self, email: str, message: str) -> AsyncIterator[dict]:
         """Run one turn and yield its events, in order. The last event is `final` or `error`."""

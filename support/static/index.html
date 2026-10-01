@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Customer support</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --panel: #ffffff; --ink: #1d1d1b; --muted: #6b6a66; --line: #e3e1db;
+    --pass: #2f7d4f; --block: #b3261e; --tool: #2b5fa8; --llm: #7a4fa0; --chip: #f0eee8;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  header { display: flex; justify-content: space-between; align-items: center;
+           padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  header h1 { font-size: 17px; margin: 0; }
+  header .who { color: var(--muted); font-size: 14px; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--panel); border-radius: 8px;
+           padding: 7px 14px; cursor: pointer; }
+  button.primary { background: var(--ink); color: #fff; border-color: var(--ink); }
+  input { font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; width: 100%; }
+
+  #login { max-width: 360px; margin: 80px auto; background: var(--panel); padding: 24px;
+           border: 1px solid var(--line); border-radius: 12px; display: grid; gap: 10px; }
+  #login .err { color: var(--block); min-height: 1.2em; font-size: 14px; }
+
+  main { display: grid; grid-template-columns: minmax(300px, 2fr) 3fr; height: calc(100vh - 53px); }
+  .col { overflow-y: auto; padding: 16px 20px; }
+  .col h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 12px; }
+  #chatcol { border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 0; }
+  #chat { flex: 1; overflow-y: auto; padding: 16px 20px; }
+  #ask { display: flex; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--line); background: var(--panel); }
+
+  .bubble { max-width: 90%; padding: 9px 13px; border-radius: 12px; margin: 0 0 10px; white-space: pre-wrap; }
+  .you { background: var(--ink); color: #fff; margin-left: auto; border-bottom-right-radius: 4px; }
+  .bot { background: var(--panel); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+  .bot.blocked { border-color: var(--block); }
+  .meta { font-size: 12px; color: var(--muted); margin: -6px 0 12px; }
+
+  .turn { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; margin: 0 0 16px; }
+  .turn > .msg { padding: 10px 14px; border-bottom: 1px solid var(--line); font-weight: 600; }
+  .turn > .msg a { font-weight: 400; font-size: 13px; float: right; }
+  .row { display: grid; grid-template-columns: 20px 110px 1fr auto; gap: 8px; padding: 7px 14px;
+         border-bottom: 1px solid var(--line); align-items: start; }
+  .row:last-child { border-bottom: 0; }
+  .icon { font-weight: 700; }
+  .name { font-weight: 600; }
+  .ms { color: var(--muted); font-size: 13px; white-space: nowrap; }
+  .sub { color: var(--muted); font-size: 12px; }
+  .chip { display: inline-block; background: var(--chip); border-radius: 5px; padding: 0 6px; font-size: 12px; margin-right: 4px; }
+  .pass { color: var(--pass); } .blocked { color: var(--block); } .running { color: var(--muted); }
+  .tool .icon, .tool .name { color: var(--tool); } .llm .icon, .llm .name { color: var(--llm); }
+  pre.sql { margin: 6px 0 0; padding: 8px; background: var(--chip); border-radius: 6px; white-space: pre-wrap;
+            font: 12.5px/1.4 ui-monospace, Menlo, monospace; }
+  .bound { color: var(--tool); font-style: italic; }
+  table { border-collapse: collapse; margin-top: 6px; font-size: 13px; }
+  th, td { border: 1px solid var(--line); padding: 3px 8px; text-align: left; }
+  th { background: var(--chip); font-weight: 600; }
+  ul.mem { margin: 6px 0 0; padding-left: 18px; font-size: 13px; }
+  ul.mem .skipped { color: var(--muted); }
+  .final { background: #fbfaf7; }
+  @media (max-width: 800px) { main { grid-template-columns: 1fr; height: auto; } #chatcol { border-right: 0; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Customer support</h1>
+  <span><span class="who" id="who"></span> <button id="logout" hidden>Log out</button></span>
+</header>
+
+<form id="login">
+  <strong>Log in</strong>
+  <input id="email" type="email" placeholder="Email" autocomplete="username" required>
+  <input id="password" type="password" placeholder="Password" autocomplete="current-password" required>
+  <button class="primary" type="submit">Log in</button>
+  <div class="err" id="loginerr"></div>
+</form>
+
+<main id="app" hidden>
+  <section class="col" id="chatcol">
+    <div id="chat"></div>
+    <form id="ask">
+      <input id="message" placeholder="Ask about your orders, deliveries, returns or account" autocomplete="off">
+      <button class="primary" type="submit">Send</button>
+    </form>
+  </section>
+  <section class="col" id="stepscol">
+    <h2>What the system did, step by step</h2>
+    <div id="steps"></div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let user = null;
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+const secs = (ms) => ms >= 1000 ? (ms / 1000).toFixed(1) + "s" : ms + "ms";
+
+$("login").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const r = await fetch("/api/login", { method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: $("email").value, password: $("password").value }) });
+  const data = await r.json();
+  if (!r.ok) { $("loginerr").textContent = data.error; return; }
+  user = data;
+  $("password").value = "";
+  $("login").hidden = true; $("app").hidden = false; $("logout").hidden = false;
+  $("who").textContent = `${data.full_name}${data.is_premium ? " · premium" : ""} · ${data.user_id}`;
+  $("message").focus();
+});
+
+$("logout").addEventListener("click", async () => {
+  await fetch("/api/logout", { method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ user_id: user.user_id }) });
+  location.reload();
+});
+
+$("ask").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const text = $("message").value.trim();
+  if (!text) return;
+  $("message").value = "";
+  $("chat").append(el("div", "bubble you", text));
+  const turn = new Turn(text);
+
+  const r = await fetch("/api/chat", { method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ user_id: user.user_id, message: text }) });
+  if (!r.ok) { turn.reply({ blocked: true, response: (await r.json()).error }); return; }
+
+  // Read the stream as it arrives: one JSON event per line.
+  const reader = r.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop();
+    for (const line of lines) if (line.trim()) turn.event(JSON.parse(line));
+  }
+});
+
+class Turn {
+  constructor(text) {
+    this.box = el("div", "turn");
+    this.head = el("div", "msg", text);
+    this.box.append(this.head);
+    $("steps").prepend(this.box);
+    this.stages = {}; this.calls = {};
+  }
+
+  row(cls, icon, name, detailNode, ms) {
+    const r = el("div", "row " + cls);
+    r.append(el("span", "icon", icon), el("span", "name", name));
+    const d = el("div"); if (detailNode) d.append(detailNode); r.append(d);
+    r.append(el("span", "ms", ms === undefined ? "" : secs(ms)));
+    this.box.append(r);
+    $("stepscol").scrollTop = 0;
+    return r;
+  }
+
+  event(ev) {
+    const handler = this["on_" + ev.type];
+    if (handler) handler.call(this, ev);
+  }
+
+  on_trace(ev) {
+    const a = el("a", "", "trace in Phoenix ↗"); a.href = ev.url; a.target = "_blank";
+    this.head.append(a);
+  }
+
+  on_stage(ev) {  // a step started: show it as running until its result arrives
+    this.stages[ev.key] = this.row("running", "…", ev.key, el("span", "sub", ev.label + " running"));
+  }
+
+  on_step(ev) {
+    const ok = ev.status === "passed";
+    const d = el("div");
+    d.append(el("div", "", ev.detail));
+    const sub = el("div", "sub");
+    sub.append(el("span", "chip", ev.kind), el("span", "chip", "span: " + ev.span));
+    d.append(sub);
+    if (ev.memories) {
+      const ul = el("ul", "mem");
+      if (!ev.memories.length) ul.append(el("li", "skipped", "no memories found"));
+      for (const m of ev.memories) {
+        const li = el("li", m.inserted ? "" : "skipped",
+          `"${m.memory}" (${m.score}) ${m.inserted ? "used" : "skipped, " + m.reason}`);
+        ul.append(li);
+      }
+      d.append(ul);
+    }
+    const r = this.row(ok ? "pass" : "blocked", ok ? "✓" : "✗", ev.key, d, ev.ms);
+    const started = this.stages[ev.key];
+    if (started) { started.replaceWith(r); delete this.stages[ev.key]; }
+  }
+
+  on_llm(ev) {
+    this.row("llm", "·", "llm", el("span", "",
+      `${ev.decision} · ${ev.tokens_in}→${ev.tokens_out} tokens · ${ev.model}`), ev.ms);
+  }
+
+  on_tool_call(ev) {
+    const d = el("div");
+    d.append(el("div", "", ev.name));
+    const sub = el("div", "sub");
+    sub.append(el("span", "chip", ev.info.kind), el("span", "chip", ev.info.access),
+               el("span", "chip", "span: " + ev.span));
+    d.append(sub);
+    d.append(sqlWithValues(ev.info, ev.args));
+    this.calls[ev.id] = this.row("tool", "→", "tool call", d);
+  }
+
+  on_tool_result(ev) {
+    const d = el("div");
+    d.append(el("div", "", ev.ok ? "result" : "failed"));
+    d.append(asTable(ev.result));
+    this.row("tool", "←", "tool result", d, ev.ms);
+  }
+
+  on_final(ev) {
+    this.row("final " + (ev.blocked ? "blocked" : "pass"), "■", "final",
+      el("span", "", ev.blocked ? `blocked at ${ev.blocked_at}` : ev.terminated), ev.wall_clock_ms);
+    this.reply(ev);
+  }
+
+  on_error(ev) {
+    this.row("blocked", "!", "error", el("span", "", `${ev.step}: ${ev.error}`));
+    this.reply({ blocked: true, response: "Something went wrong: " + ev.error });
+  }
+
+  reply(ev) {
+    $("chat").append(el("div", "bubble bot" + (ev.blocked ? " blocked" : ""), ev.response));
+    if (ev.wall_clock_ms) {
+      const t = ev.tokens ? ` · ${ev.tokens.in}→${ev.tokens.out} tokens` : "";
+      $("chat").append(el("div", "meta", secs(ev.wall_clock_ms) + t));
+    }
+    $("chat").scrollTop = $("chat").scrollHeight;
+  }
+}
+
+// The SQL the tool ran, with each $n replaced by the value the model chose.
+// A parameter the model did not supply is bound to the logged-in customer by the server.
+function sqlWithValues(info, args) {
+  const pre = el("pre", "sql");
+  if (!info.statement) return pre;
+  const parts = info.statement.split(/(\$\d+)/);
+  for (const part of parts) {
+    const m = part.match(/^\$(\d+)$/);
+    if (!m) { pre.append(part); continue; }
+    const name = info.params[Number(m[1]) - 1];
+    if (name in args) {
+      const v = args[name];
+      pre.append(typeof v === "string" ? `'${v}'` : (typeof v === "object" ? `'${JSON.stringify(v)}'` : String(v)));
+    } else {
+      pre.append(el("span", "bound", `‹${name}: bound to login›`));
+    }
+  }
+  return pre;
+}
+
+function asTable(result) {
+  const rows = Array.isArray(result) ? result : (result && typeof result === "object" ? [result] : null);
+  if (!rows || !rows.length || typeof rows[0] !== "object") return el("pre", "sql", JSON.stringify(result));
+  const cols = [...new Set(rows.flatMap(Object.keys))];
+  const t = el("table");
+  const hr = el("tr"); cols.forEach(c => hr.append(el("th", "", c))); t.append(hr);
+  for (const r of rows) {
+    const tr = el("tr");
+    cols.forEach(c => tr.append(el("td", "", r[c] === undefined ? "" : (typeof r[c] === "object" ? JSON.stringify(r[c]) : String(r[c])))));
+    t.append(tr);
+  }
+  return t;
+}
+</script>
+</body>
+</html>

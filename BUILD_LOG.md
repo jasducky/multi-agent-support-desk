@@ -190,7 +190,7 @@ agent.turn input: "What is the status of order 3? My card is [card number remove
 
 ## Stage 9: the web UI
 - **My sketch, in words:** The chat is on the left and the steps are on the right, read top to bottom. The customer's message comes first, then its steps fill in live on the right, then the reply appears below them. I'll try a couple of versions when building and keep the clearest. Customers wouldn't see this, as it's for the course, to watch the system work, and in a real shop only the product and technical people who assess the system would see it.
-- **Something the UI shows that the CLI doesn't (feature or leak?):**
+- **Something the UI shows that the CLI doesn't (feature or leak?):** The page shows the SQL each tool ran, with the values filled in. That is a feature, as only staff would see this page. But the page also showed a neighbour's phone number and email, saved in memory. The Masker only checks the reply, so memory and traces keep these details.
 
 ## Stage 10: the eval runner
 - **How I handled the memory waits:** I'll plant all ten memory facts first, run the other tests, then ask the ten memory questions. The other tests take longer than the two-minute wait, so no time is spent just waiting. The runner will check the time before each question. I won't run the memory tests all at once, as that could hit the model's usage limits and make failures harder to follow.

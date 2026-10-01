@@ -26,7 +26,7 @@ tools:
   check-login:
     kind: postgres-sql
     source: login-db
-    description: Check a customer's email and password. Returns their name, or nothing.
+    description: Check a customer's email and password. Returns their name and premium flag, or nothing.
     parameters:
       - name: email
         type: string
@@ -35,7 +35,8 @@ tools:
         type: string
         description: The password the customer typed.
     statement: |
-      SELECT full_name FROM users WHERE email = $1::text AND password = $2::text;
+      SELECT full_name, is_premium_customer AS is_premium FROM users
+      WHERE email = $1::text AND password = $2::text;
 
   # M-4: ownership in the SQL. The order comes back only if the number AND the email match.
   get-order-status:

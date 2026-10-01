@@ -81,6 +81,7 @@ GRANT SELECT ON customer_orders TO toolbox;
 GRANT INSERT ON actions_log TO toolbox;
 GRANT USAGE ON SEQUENCE actions_log_id_seq TO toolbox;
 
--- 5. The log-in check's own login (role `login_checker`, Stage 3): it can read only the three
--- customer columns the check needs, and nothing in the orders or the actions log.
-GRANT SELECT (email, password, full_name) ON users TO login_checker;
+-- 5. The log-in check's own login (role `login_checker`, Stage 3): it can read only the four
+-- customer columns the check needs (the premium flag since Stage 9, for the web log-in answer),
+-- and nothing in the orders or the actions log.
+GRANT SELECT (email, password, full_name, is_premium_customer) ON users TO login_checker;

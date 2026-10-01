@@ -70,6 +70,12 @@ For A2A I use message/send, one of the two names the spec allows. The newest ver
 
 If an order changes after a memory was saved, the database wins. Each memory is shown to the agent with the date it was saved (Mem0 already records this), and the agent's instructions say order facts come from the tools. If a memory and the database disagree, for example a cancel the customer asked for last week that never happened, the agent answers from the database, mentions the earlier request and when it was made, and logs a new request so someone follows it up. The agent can't read the action log itself, so it only spots this through memory.
 
+**Found while building.** Not fixed yet: I'll decide after the Stage 10 run.
+
+- **Masking (Stages 8 and 9).** Saw: a customer gave a neighbour's phone number and email. They were kept in plain text in memory, the traces and the action log, and showed on the steps page. The Masker only checks the reply, and saving only removes card numbers. Change: remove phone numbers and other people's emails before anything is saved, as we do for card numbers.
+- **Memory (Stage 9).** Saw: every question is saved as a memory too, such as "User asked for the status of order 3". Memory fills with questions as well as facts. Change: check in Stage 10 whether these push out real facts. If they do, save only facts.
+- **Cut-off (Stage 8).** Saw: my planted memory scored 0.26, only just above the 0.25 cut-off. Change: none yet. I'll look at the memory results in Stage 10 before moving it.
+
 ## Trade-offs
 
 What each check costs in time: to add after the build, from the traces.

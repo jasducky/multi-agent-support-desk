@@ -7,6 +7,7 @@
 #   ./run.sh start    start the background services (Toolbox, Phoenix, Judge, Masker); logs in .run/
 #   ./run.sh stop     stop them
 #   ./run.sh chat     the chat in the terminal (needs the services running)
+#   ./run.sh web      the web page and API on http://localhost:8000 (needs the services running)
 #   ./run.sh check N  run stage N's "Prove it" next to the prediction in BUILD_LOG.md
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -79,9 +80,11 @@ case "${1:-}" in
     start_bg judge 10002 .venv/bin/uvicorn guards.judge:app --host 127.0.0.1 --port 10002
     # K-1: the Data Masker, its own process, reached over A2A.
     start_bg masker 10003 .venv/bin/uvicorn guards.masker:app --host 127.0.0.1 --port 10003
+    # W-1: the web page and API (Stage 9), last because it connects to all of the above.
+    start_bg web 8000 .venv/bin/uvicorn support.web:app --host 127.0.0.1 --port 8000
     ;;
   stop)
-    for pair in toolbox:5001 phoenix:6006 judge:10002 masker:10003; do
+    for pair in web:8000 toolbox:5001 phoenix:6006 judge:10002 masker:10003; do
       name=${pair%%:*} port=${pair##*:}
       pids=$(lsof -ti "tcp:$port" || true)
       [ -n "$pids" ] && kill $pids && echo "$name: stopped" || echo "$name: was not running"
@@ -90,6 +93,10 @@ case "${1:-}" in
     ;;
   chat)
     exec .venv/bin/python -m support.cli
+    ;;
+  web)
+    # Stage 9: the web UI and API on http://localhost:8000 (W-1). Runs until Ctrl+C.
+    exec .venv/bin/uvicorn support.web:app --host 127.0.0.1 --port 8000
     ;;
   check)
     # One stage's "Prove it" from TECHNICAL.md, printed under the prediction from BUILD_LOG.md.
@@ -181,11 +188,42 @@ case "${1:-}" in
         $PY -W ignore -m eval.check8
         ./run.sh reset > /dev/null  # the turns may have logged real requests; start clean
         ;;
-      *) echo "usage: ./run.sh check <stage number>  (stages so far: 4 to 8)" >&2; exit 1 ;;
+      9)
+        echo "== Your decision (BUILD_LOG.md, Stage 9) =="
+        grep -m1 'My sketch, in words' BUILD_LOG.md | sed 's/^- //'
+        echo
+        curl -s -o /dev/null localhost:8000/health || { echo "Start the web page first: ./run.sh start"; exit 1; }
+        U=localhost:8000 J='content-type: application/json'
+        curl -s -o /dev/null -X POST $U/api/login -H "$J" -d '{"email":"alice.jones@example.com","password":"alice"}'
+        echo "== Course check, part 1: the web stream for 'What is the status of order 3?' as Alice =="
+        echo "(the seconds column is when each line arrived: they must arrive one by one, not all at the end)"
+        T0=$(perl -MTime::HiRes=time -e 'printf "%.2f", time')
+        curl -sN -X POST $U/api/chat -H "$J" \
+          -d '{"user_id":"alice.jones@example.com","message":"What is the status of order 3?"}' \
+          | tee .run/web-stream.ndjson | while IFS= read -r line; do
+              printf "%5.1fs  %s\n" "$(perl -MTime::HiRes=time -e "printf '%.2f', time - $T0")" \
+                "$(echo "$line" | jq -r '.type + (if .key then " " + .key else "" end) + (if .status then "  " + .status else "" end)')"
+            done
+        echo
+        echo "== Course check, part 2: are the event types the same as the terminal's --events? =="
+        echo "What is the status of order 3?" \
+          | $PY -W ignore -m support.cli --user alice.jones@example.com --password alice --events 2>/dev/null \
+          | jq -r '.type + (if .key then " " + .key else "" end)' > .run/cli-types.txt
+        jq -r '.type + (if .key then " " + .key else "" end)' .run/web-stream.ndjson > .run/web-types.txt
+        if diff -q .run/web-types.txt .run/cli-types.txt > /dev/null; then
+          echo "SAME: $(wc -l < .run/web-types.txt | tr -d ' ') events each, same types, same order"
+        else
+          echo "DIFFERENT (web on the left, terminal on the right):"; diff .run/web-types.txt .run/cli-types.txt
+        fi
+        echo
+        echo "== Now open the page and try it: http://localhost:8000 (alice.jones@example.com / alice) =="
+        ./run.sh reset > /dev/null  # the turns may have logged real requests; start clean
+        ;;
+      *) echo "usage: ./run.sh check <stage number>  (stages so far: 4 to 9)" >&2; exit 1 ;;
     esac
     ;;
   *)
-    echo "usage: ./run.sh setup | reset | start | stop | toolbox | chat | check N" >&2
+    echo "usage: ./run.sh setup | reset | start | stop | toolbox | chat | web | check N" >&2
     exit 1
     ;;
 esac
