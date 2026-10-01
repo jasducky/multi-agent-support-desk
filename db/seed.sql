@@ -80,3 +80,7 @@ CREATE INDEX customer_orders_customer_email_idx ON customer_orders (customer_ema
 GRANT SELECT ON customer_orders TO toolbox;
 GRANT INSERT ON actions_log TO toolbox;
 GRANT USAGE ON SEQUENCE actions_log_id_seq TO toolbox;
+
+-- 5. The log-in check's own login (role `login_checker`, Stage 3): it can read only the three
+-- customer columns the check needs, and nothing in the orders or the actions log.
+GRANT SELECT (email, password, full_name) ON users TO login_checker;

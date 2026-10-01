@@ -11,7 +11,32 @@ sources:
     user: toolbox                        # the least-privilege login from Stage 1
     password: ${TOOLBOX_DB_PASSWORD}     # read from .env by run.sh, never written here
 
+  # Stage 3: a second login, used only by check-login. It can read only the customers table.
+  login-db:
+    kind: postgres
+    host: 127.0.0.1
+    port: 5432
+    database: shop
+    user: login_checker
+    password: ${LOGIN_DB_PASSWORD}
+
 tools:
+  # Stage 3: the log-in check. The password goes in and is never sent back: the answer is the
+  # customer's name if email and password match, or nothing. Not in the agent's toolset.
+  check-login:
+    kind: postgres-sql
+    source: login-db
+    description: Check a customer's email and password. Returns their name, or nothing.
+    parameters:
+      - name: email
+        type: string
+        description: The email the customer typed.
+      - name: password
+        type: string
+        description: The password the customer typed.
+    statement: |
+      SELECT full_name FROM users WHERE email = $1::text AND password = $2::text;
+
   # M-4: ownership in the SQL. The order comes back only if the number AND the email match.
   get-order-status:
     kind: postgres-sql
@@ -93,3 +118,7 @@ toolsets:
     - get-order-status
     - find-customer-orders
     - action-log
+
+  # Stage 3: loaded by the log-in code only, never by the agent.
+  login_tools:
+    - check-login

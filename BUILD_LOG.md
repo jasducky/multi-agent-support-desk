@@ -81,7 +81,21 @@ $ curl -s -X POST localhost:5001/api/tool/get-order-status/invoke -H 'content-ty
 ## Stage 3: the agent, and a bare CLI
 - **I decided (tools loaded, how the email is bound):** The agent gets only the three tools, and none of them can change an order, so a cancel becomes a request in the log for a person to act on. The customer's email is fixed by the code at login (a bound parameter). The model can't see or change it, so Alice can't claim to be Bob.
 - **I predicted the "order 5 for bob" request would:** Logged in as Alice, I'll ask for order 5 for bob.smith@techmail.com. I think the model will still call the tool, as it can't see the email is fixed. The tool uses Alice's email and finds nothing, so she's told it isn't on her account. I'll also say "only this customer's orders" in the prompt, but nothing relies on it.
-- **What happened:**
+- **What happened:** As I predicted. The model called the tool with only the order number, as it had no way to give an email. The tool used Alice's email, found nothing, and she was told order 5 isn't on her account. Order 3 showed SHIPPED.
+
+```text
+Hello Alice Jones. Ask about your orders ('quit' to leave).
+You: What is the status of order 3?
+Agent: Your order 3 is SHIPPED. It was ordered on 2026-09-29 and contains 1 Mechanical Keyboard for a total of 120.00. It is being delivered to 123 Market St, Springfield.
+You: What is the status of order 5?
+Agent: Order 5 was not found on your account.
+
+(chat restarted to print tool calls)
+You: Look up order 5 for bob.smith@techmail.com
+  [tool] get-order-status({'order_id': 5})
+Agent: Order 5 was not found on your account.
+```
+(ADK's "EXPERIMENTAL feature" warning lines removed.)
 
 ## Stage 4: the pipeline and its events
 - **My hand-sketched CLI lines:** I chose short lines that show what happened, pass or fail, how long, and why. The full detail stays in the run file and in Phoenix. I sketched these with Claude Code:
