@@ -97,6 +97,7 @@ case "${1:-}" in
     PY=.venv/bin/python
     mkdir -p reports
     exec > >(tee "reports/check-${2:-}.txt")  # keep a copy for the build log (reports/ is git-ignored)
+    export PYTHONUNBUFFERED=1  # print each line as it happens, not all at the end (tee would buffer it)
     case "${2:-}" in
       4)
         echo "== Your prediction (BUILD_LOG.md, Stage 4) =="
