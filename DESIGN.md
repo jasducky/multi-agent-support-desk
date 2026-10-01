@@ -52,7 +52,7 @@ A message from the web page or the command line goes through these steps, in thi
 8. Save stores what the customer said in Mem0 over HTTP.
 9. Every step is streamed back to the web page as it happens, one line per step (NDJSON).
 
-For A2A I use message/send, the current version of the standard. A Judge verdict on the wire looks like this:
+For A2A I use message/send, one of the two names the spec allows. The newest version of the standard calls it SendMessage, and my Judge accepts both. A Judge verdict on the wire looks like this:
 
 ```json
 { "verdict": "allow", "reason": "no injection patterns" }
