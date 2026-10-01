@@ -1,0 +1,95 @@
+# mcp_toolbox/tools.yaml: the only door to the shop's database (Stage 2).
+# Started by `./run.sh toolbox` on port 5001. The agent can call these three tools and nothing else;
+# it never writes SQL. Each tool is one fixed query with blanks ($1, $2, ...) for the values.
+
+sources:
+  shop-db:
+    kind: postgres
+    host: 127.0.0.1
+    port: 5432
+    database: shop
+    user: toolbox                        # the least-privilege login from Stage 1
+    password: ${TOOLBOX_DB_PASSWORD}     # read from .env by run.sh, never written here
+
+tools:
+  # M-4: ownership in the SQL. The order comes back only if the number AND the email match.
+  get-order-status:
+    kind: postgres-sql
+    source: shop-db
+    description: >
+      Get the status and details of one of the logged-in customer's orders by its order number.
+      Use when the customer asks about a specific order. Returns nothing if the customer has no
+      order with that number.
+    parameters:
+      - name: order_id
+        type: integer
+        description: The order number the customer asked about, e.g. 3.
+      - name: customer_email
+        type: string
+        description: The logged-in customer's email. Filled in by the system, never by the model.
+    statement: |
+      SELECT order_id, status, delivery_address, items, order_date, total_amount
+      FROM customer_orders
+      WHERE order_id = $1 AND customer_email = $2;
+
+  # M-4: same rule, for the whole order history.
+  find-customer-orders:
+    kind: postgres-sql
+    source: shop-db
+    description: >
+      List all of the logged-in customer's orders, most recent first.
+      Use when the customer asks about their orders without giving an order number.
+    parameters:
+      - name: customer_email
+        type: string
+        description: The logged-in customer's email. Filled in by the system, never by the model.
+    statement: |
+      SELECT order_id, status, delivery_address, items, order_date, total_amount
+      FROM customer_orders
+      WHERE customer_email = $1
+      ORDER BY order_date DESC;
+
+  # M-7 and M-8: log a request for staff; never changes an order.
+  # One query checks and writes together: if the request names an order the customer does not
+  # own, nothing is written and it reports logged = 0. The five labels are also enforced by the
+  # database's CHECK rule from Stage 1.
+  action-log:
+    kind: postgres-sql
+    source: shop-db
+    description: >
+      Record a customer's request for a member of staff to act on. This does not change any
+      order. action_type must be one of: CANCEL_ORDER, RETURN_ORDER, UPDATE_ADDRESS,
+      UPDATE_PREFERENCE, UPDATE_PROFILE. Returns logged = 1 if recorded, logged = 0 if the
+      order is not the customer's.
+    parameters:
+      - name: user_email
+        type: string
+        description: The logged-in customer's email. Filled in by the system, never by the model.
+      - name: action_type
+        type: string
+        description: >
+          One of CANCEL_ORDER, RETURN_ORDER, UPDATE_ADDRESS, UPDATE_PREFERENCE, UPDATE_PROFILE.
+      - name: parameters
+        type: string
+        description: >
+          A JSON object with the request's details. Include "order_id" whenever an order is
+          involved, e.g. {"order_id": 4, "reason": "ordered by mistake"}.
+    statement: |
+      WITH written AS (
+        INSERT INTO actions_log (user_email, action_type, parameters)
+        SELECT $1::text, $2::text, $3::jsonb
+        WHERE ($3::jsonb ->> 'order_id') IS NULL
+           OR EXISTS (
+                SELECT 1 FROM customer_orders
+                WHERE order_id = ($3::jsonb ->> 'order_id')::int
+                  AND customer_email = $1::text)
+        RETURNING 1
+      )
+      SELECT count(*) AS logged FROM written;
+
+toolsets:
+  # M-6: the agent loads only this list. No tool here can change customer_orders.
+  support_agent_tools:
+    - get-order-status
+    - find-customer-orders
+    - action-log

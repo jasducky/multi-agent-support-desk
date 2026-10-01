@@ -68,7 +68,15 @@ ERROR:  permission denied for table users
 ## Stage 2: the tools, and where access control lives
 - **Before reading SPEC R-1, I thought ownership belonged in:** Code. It's an access rule, so it must hold every time, and a prompt can be ignored.
 - **I decided:** Reading R-1 didn't change my mind. The agent never touches the database. It asks the Toolbox to run one of three tools: look up an order, list orders, or log a request. Each tool's query only returns an order when the order number and the email both match. The course's reference version only said this in the prompt, and Alice got Bob's $1,500 laptop. I expect Alice to get her keyboard for order 3, and nothing for order 5.
-- **What happened (order 5 as alice):**
+- **What happened (order 5 as alice):** As I expected. Alice got her keyboard for order 3, and an empty answer for order 5.
+
+```text
+$ curl -s -X POST localhost:5001/api/tool/get-order-status/invoke -H 'content-type: application/json' -d '{"order_id": 3, "customer_email": "alice.jones@example.com"}'
+{"result":"[{\"order_id\":3,\"status\":\"SHIPPED\",\"delivery_address\":\"123 Market St, Springfield\",\"items\":[{\"price\":120,\"product\":\"Mechanical Keyboard\",\"qty\":1}],\"order_date\":\"2026-09-29T10:28:29.352337+01:00\",\"total_amount\":\"120.00\"}]"}
+
+$ curl -s -X POST localhost:5001/api/tool/get-order-status/invoke -H 'content-type: application/json' -d '{"order_id": 5, "customer_email": "alice.jones@example.com"}'
+{"result":"[]"}
+```
 
 ## Stage 3: the agent, and a bare CLI
 - **I decided (tools loaded, how the email is bound):** The agent gets only the three tools, and none of them can change an order, so a cancel becomes a request in the log for a person to act on. The customer's email is fixed by the code at login (a bound parameter). The model can't see or change it, so Alice can't claim to be Bob.
