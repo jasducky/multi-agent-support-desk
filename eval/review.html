@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Eval review</title>
+<title>Error analysis</title>
 <style>
   :root { --bg:#f6f5f2; --panel:#fff; --ink:#1d1d1b; --muted:#6b6a66; --line:#e3e1db;
           --pass:#2f7d4f; --fail:#b3261e; --tool:#2b5fa8; --chip:#f0eee8; --note:#fffbea; }
@@ -42,39 +42,100 @@
   .notes label { font-size:13px; color:var(--muted); display:block; margin:6px 0 3px; }
   .saved { font-size:13px; color:var(--pass); min-height:1.2em; }
   .muted { color:var(--muted); }
+  .steps { display:flex; gap:6px; }
+  .steps button.on { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .help { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:10px 14px; margin-bottom:14px; font-size:14px; }
+  #wide { overflow-y:auto; padding:18px 24px; }
+  #wide table { width:100%; font-size:14px; background:var(--panel); }
+  #wide td input { width:100%; font:inherit; padding:5px; border:1px solid var(--line); border-radius:6px; }
+  #wide td.code { white-space:pre-wrap; max-width:640px; }
 </style>
 </head>
 <body>
 <header>
-  <h1>Eval review</h1>
+  <h1>Error analysis</h1>
+  <span class="steps">
+    <button data-step="open" class="on">1. Open coding</button>
+    <button data-step="axial">2. Axial coding</button>
+    <button data-step="count">3. Count</button>
+  </span>
   <select id="run"></select>
   <select id="show"><option value="failing">Failing only</option><option value="all">All items</option></select>
   <span class="count" id="count"></span>
 </header>
-<main>
+<main id="openview">
   <nav id="list"></nav>
   <section id="detail"><p class="muted">Pick an item on the left.</p></section>
 </main>
+<section id="wide" hidden></section>
 <script>
 const $ = (id) => document.getElementById(id);
-let items = [], notes = {}, current = null;
+let items = [], notes = {}, current = null, step = "open";
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
 
 async function load() {
   const run = $("run").value;
   items = await (await fetch(`/api/items?run=${run}`)).json();
   notes = await (await fetch(`/api/notes?run=${run}`)).json();
-  drawList();
+  draw();
+}
+
+function draw() {
+  $("openview").hidden = step !== "open";
+  $("wide").hidden = step === "open";
+  document.querySelectorAll(".steps button").forEach(b => b.classList.toggle("on", b.dataset.step === step));
+  if (step === "open") drawList(); else if (step === "axial") drawAxial(); else drawCount();
+}
+
+async function saveNote(id, note, type) {
+  await fetch(`/api/notes?run=${$("run").value}`, { method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id, note, type }) });
+  notes[id] = { note, type };
+}
+
+function reviewed() { return items.filter(i => ($("show").value === "all" || !i.pass)); }
+
+function drawAxial() {
+  const w = $("wide");
+  const help = el("div", "help");
+  help.innerHTML = "<b>Step 2, axial coding.</b> Read your open codes together. Where several describe the same kind of failure, give them the same short label. Reuse a label by picking it from the suggestions. One label per item; the label names the failure, not the fix.";
+  const labels = [...new Set(Object.values(notes).map(n => n.type).filter(Boolean))].sort();
+  const dl = el("datalist"); dl.id = "labels"; labels.forEach(l => { const o = el("option"); o.value = l; dl.append(o); });
+  const t = el("table");
+  const h = el("tr"); ["Item", "Why it failed", "Your open code", "Failure type"].forEach(c => h.append(el("th", "", c))); t.append(h);
+  for (const i of reviewed()) {
+    const tr = el("tr");
+    tr.append(el("td", "", `${i.id} (${i.set})`), el("td", "", i.pass ? "passed" : (i.why || "")),
+              el("td", "code", notes[i.id]?.note || "(no open code yet)"));
+    const td = el("td"); const inp = el("input"); inp.setAttribute("list", "labels"); inp.value = notes[i.id]?.type || "";
+    inp.onblur = async () => { await saveNote(i.id, notes[i.id]?.note || "", inp.value.trim()); };
+    td.append(inp); tr.append(td); t.append(tr);
+  }
+  w.replaceChildren(help, dl, t);
+}
+
+function drawCount() {
+  const w = $("wide");
+  const help = el("div", "help");
+  help.innerHTML = "<b>Step 3, count.</b> How many items carry each failure type. The biggest groups, weighed against customer harm and effort, tell you what to fix first.";
+  const groups = {};
+  for (const i of reviewed()) { const k = notes[i.id]?.type || "(not labelled yet)"; (groups[k] ||= []).push(i.id); }
+  const t = el("table");
+  const h = el("tr"); ["Failure type", "Count", "Items"].forEach(c => h.append(el("th", "", c))); t.append(h);
+  Object.entries(groups).sort((a, b) => b[1].length - a[1].length).forEach(([k, ids]) => {
+    const tr = el("tr"); tr.append(el("td", "", k), el("td", "", String(ids.length)), el("td", "", ids.join(", "))); t.append(tr);
+  });
+  w.replaceChildren(help, t);
 }
 
 function drawList() {
   const shown = items.filter(i => $("show").value === "all" || !i.pass);
-  $("count").textContent = `${shown.length} shown · ${items.filter(i => !i.pass).length} failing of ${items.length} · ${Object.keys(notes).filter(k => notes[k].note).length} noted`;
+  $("count").textContent = `${shown.length} shown · ${items.filter(i => !i.pass).length} failing of ${items.length} · ${shown.filter(i => notes[i.id]?.note).length} of ${shown.length} open-coded`;
   $("list").replaceChildren(...shown.map(i => {
     const d = el("div", "it " + (i.pass ? "ok" : "fail") + (current === i.id ? " on" : ""));
     const top = el("div", "top");
     top.append(el("span", "id", i.id), el("span", "set", i.set));
-    if (notes[i.id]?.note) top.append(el("span", "noted", "✓ noted"));
+    if (notes[i.id]?.note) top.append(el("span", "noted", "✓ coded"));
     d.append(top, el("div", "why", i.pass ? "passed" : (i.why || "failed")));
     d.onclick = () => show(i);
     return d;
@@ -135,18 +196,11 @@ async function show(i) {
 
   const n = el("div");
   const note = el("textarea"); note.value = notes[i.id]?.note || "";
-  note.placeholder = "In your own words: what went wrong (or right) in this turn?";
-  const type = el("input"); type.value = notes[i.id]?.type || "";
-  type.placeholder = "Failure type, a short label you reuse across items, e.g. 'asked instead of looking up'";
+  note.placeholder = "Think aloud: what do you notice in this turn? What went wrong, and where in the chain?";
   const saved = el("div", "saved");
-  async function save() {
-    await fetch(`/api/notes?run=${$("run").value}`, { method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ id: i.id, note: note.value, type: type.value }) });
-    notes[i.id] = { note: note.value, type: type.value }; saved.textContent = "Saved"; drawList();
-  }
-  note.onblur = save; type.onblur = save;
-  n.append(el("label", "", "What went wrong"), note, el("label", "", "Failure type"), type, saved);
-  const nc = card("Your notes", n); nc.classList.add("notes"); parts.push(nc);
+  note.onblur = async () => { await saveNote(i.id, note.value, notes[i.id]?.type || ""); saved.textContent = "Saved"; drawList(); };
+  n.append(el("div", "muted", "Step 1, open coding: one rough note per item, in your own words. No labels yet; grouping is step 2."), note, saved);
+  const nc = card("Your open code", n); nc.classList.add("notes"); parts.push(nc);
 
   $("detail").replaceChildren(...parts);
 }
@@ -155,7 +209,8 @@ async function show(i) {
   const runs = await (await fetch("/api/runs")).json();
   $("run").replaceChildren(...runs.map(r => { const o = el("option", "", `${r.run} · ${r.ran_at.slice(0, 16).replace("T", " ")}`); o.value = r.run; return o; }));
   $("run").onchange = () => { current = null; load(); };
-  $("show").onchange = drawList;
+  $("show").onchange = draw;
+  document.querySelectorAll(".steps button").forEach(b => b.onclick = () => { step = b.dataset.step; load(); });
   load();
 })();
 </script>

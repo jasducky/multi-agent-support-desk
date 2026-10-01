@@ -1,4 +1,4 @@
-"""Error-analysis review page for eval runs, on port 8001. A reviewing tool, not part of the product.
+"""Error analysis page for eval runs (open coding, axial coding, count), on port 8001. A reviewing tool, not part of the product.
 
 Phoenix shows whether code ran; it cannot show whether an answer was right. This page joins the
 two: each eval item from a report (pass or fail, and why), with its turn rebuilt from its Phoenix
