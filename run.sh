@@ -161,7 +161,17 @@ case "${1:-}" in
         echo "== Restarting the Judge =="
         ./run.sh start | grep judge
         ;;
-      *) echo "usage: ./run.sh check <stage number>  (stages so far: 4, 5, 6)" >&2; exit 1 ;;
+      7)
+        echo "== Your decision (BUILD_LOG.md, Stage 7): the rule and your six examples =="
+        sed -n '/Three messages that must pass/,/The examples are my own/p' BUILD_LOG.md | sed 's/^- //'
+        echo
+        echo "== Course check: the legitimate and off-topic sets through the whole pipeline =="
+        echo "(47 real turns, agent included; about 5 to 10 minutes on the free plan)"
+        echo
+        $PY -m eval.guards_count
+        ./run.sh reset > /dev/null  # the turns may have logged real requests; start clean
+        ;;
+      *) echo "usage: ./run.sh check <stage number>  (stages so far: 4, 5, 6, 7)" >&2; exit 1 ;;
     esac
     ;;
   *)

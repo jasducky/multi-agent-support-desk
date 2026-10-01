@@ -181,7 +181,7 @@ agent.turn input: "What is the status of order 3? My card is [card number remove
 
   | Version | What I changed | Legit false blocks | Off-topic blocked |
   |---|---|---|---|
-  | v1 | | | |
+  | v1 | First prompt, based on the PRD | 0 of 30 | 15 of 15 |
 
 ## Stage 8: Masker and memory
 - **I decided (what counts as PII, the cutoff):** The Masker hides other people's emails, all phone numbers, and card numbers except the last four digits. Customers can still see their own email and address. The shop holds no phone numbers, so every phone number is hidden. In this build it's a safety net, as the tools already block other customers' data. I'm keeping the memory cut-off at 0.25, as support questions are usually about one recent issue. I'd only change it if my test memory scores below 0.25.

@@ -3,12 +3,13 @@
 The CLI and the web server only render what this yields. Each turn also writes
 runs/<turn_id>.json (EVALS 4.1) before its last event.
 
-Steps so far, in the order P-2 fixes: sanitize -> judge -> agent. Stages 7 and 8 add
-guardrail, recall, mask and save. A block ends the turn at once (P-3); a guard that fails ends
+Steps so far, in the order P-2 fixes: sanitize -> judge -> guardrail -> agent. Stage 8 adds
+recall, mask and save. A block ends the turn at once (P-3); a guard that fails ends
 it with an error naming the step, never with "allow" (P-4).
 """
 
 import json
+import logging
 import time
 import uuid
 import warnings
@@ -26,11 +27,15 @@ from opentelemetry.trace import Status, StatusCode
 from toolbox_core import ToolboxClient
 
 from guards import sanitizer
+from guards.guardrail import BLOCK_REPLIES, Guardrail
+from guards.guardrail import PROMPT_VERSION as GUARDRAIL_VERSION
 from support import telemetry
 from support.agent import MODEL, PROMPT_VERSION, build_agent
 
 # ADK announces that it describes tools to Gemini in a newer, "experimental" way. Harmless.
 warnings.filterwarnings("ignore", message=r".*\[EXPERIMENTAL\].*")
+# google-genai logs a long advisory about its automatic function calling on every Guardrail call.
+logging.getLogger("google_genai.models").setLevel(logging.ERROR)
 
 ROOT = Path(__file__).resolve().parent.parent
 TOOLBOX_URL = "http://127.0.0.1:5001"
@@ -111,6 +116,7 @@ class SupportPipeline:
         self._sessions = InMemorySessionService()
         self._runners: dict[str, tuple[Runner, str]] = {}  # email -> (runner, session id)
         self._tool_info = _tool_info()
+        self._guardrail = Guardrail()
 
     async def __aenter__(self):
         return self
@@ -151,7 +157,8 @@ class SupportPipeline:
         # call_llm and execute_tool spans become its children.
         span = self._tracer.start_span("agent.turn", attributes={
             "openinference.span.kind": "CHAIN", "input.value": message, "user.id": email,
-            "session.id": session_id, "metadata": json.dumps({"prompt_version": PROMPT_VERSION}),
+            "session.id": session_id, "metadata": json.dumps({"prompt_version": PROMPT_VERSION,
+                                    "guardrail_version": GUARDRAIL_VERSION}),
         })
         token = otel_context.attach(trace.set_span_in_context(span))
         try:
@@ -171,7 +178,8 @@ class SupportPipeline:
         yield {"type": "trace", "turn_id": turn_id, "trace_id": trace_id,
                "url": telemetry.trace_url(trace_id)}
 
-        def finish(status: str, key: str | None = None, error: str | None = None) -> list[dict]:
+        def finish(status: str, key: str | None = None, error: str | None = None,
+                   reply: str = BLOCKED_REPLY) -> list[dict]:
             """The turn's last event, after writing its run file. Blocked and error turns."""
             record.update(terminated=status, blocked_at=key if status == "blocked" else None,
                           wall_clock_ms=ms_since(started))
@@ -180,9 +188,9 @@ class SupportPipeline:
                 span.set_status(Status(StatusCode.ERROR, error))
                 return [{"type": "error", "step": key, "status": 502, "error": error,
                          "terminated": "error"}]
-            span.set_attribute("output.value", BLOCKED_REPLY)
+            span.set_attribute("output.value", reply)
             return [{"type": "final", "blocked": True, "blocked_at": key,
-                     "response": BLOCKED_REPLY, "terminated": "blocked",
+                     "response": reply, "terminated": "blocked",
                      "wall_clock_ms": record["wall_clock_ms"], "tokens": record["tokens"]}]
 
         def step(key: str, passed: bool, detail: str, ms: int, span_name: str, kind: str) -> dict:
@@ -229,7 +237,33 @@ class SupportPipeline:
                 yield e
             return
 
-        # 3. The support agent.
+        # 3. Guardrail: in-process agent, is this something the shop's desk should handle (GR-1)?
+        yield {"type": "stage", "key": "guardrail", "label": "Guardrail (on-topic check)"}
+        t = time.monotonic()
+        with self._tracer.start_as_current_span("guardrail.check", attributes={
+                "openinference.span.kind": "GUARDRAIL", "input.value": message}) as s:
+            try:
+                answer = await self._guardrail.check(message)
+                s.set_attribute("output.value", json.dumps(answer))
+                failure = None
+            except Exception as exc:  # GR-4: unreadable or failed is an error, never a pass
+                s.set_status(Status(StatusCode.ERROR, str(exc)))
+                s.record_exception(exc)
+                failure = f"Guardrail failed: {exc}"
+        if failure:
+            record["steps"].append({"key": "guardrail", "status": "error", "ms": ms_since(t)})
+            for e in finish("error", "guardrail", failure):
+                yield e
+            return
+        safe = answer["decision"] == "safe"
+        detail = answer["decision"] + ("" if safe else f" ({answer['block_type']})") + f": {answer['reasoning']}"
+        yield step("guardrail", safe, detail, ms_since(t), "guardrail.check", "in-process")
+        if not safe:
+            for e in finish("blocked", "guardrail", reply=BLOCK_REPLIES[answer["block_type"]]):
+                yield e
+            return
+
+        # 4. The support agent.
         yield {"type": "stage", "key": "agent", "label": "Support agent (ADK, tools over MCP)"}
         agent_started = last_llm_start = time.monotonic()
         call_ids: dict[str, tuple[int, float]] = {}  # ADK's call id -> (our id, when it was called)
