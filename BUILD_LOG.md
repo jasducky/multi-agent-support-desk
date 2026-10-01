@@ -16,7 +16,54 @@ Alice never sees Bob's laptop.
 ## Stage 1: the database
 - **I decided:** A reset script that deletes the tables and reloads the sample data. Every test run then starts with the same shop, and order 5 is always Bob's laptop. I compared three options with Claude Code: Docker is slower, and a rollback doesn't reset the order numbers.
 - **I predicted:** Three tables: 10 customers, 17 orders numbered 1 to 17, and an empty actions log. The actions log only accepts five labels: cancel, return, update address, update preference and update profile. So logging `RETURN_ITEM` should be refused, which stops one kind of request being counted under two names.
-- **What happened (paste output):**
+- **What happened (paste output):** All three checks matched what I expected. There are 10 customers and 17 orders, and order 5 is Bob's laptop. The database refused `RETURN_ITEM`. I also tested the Toolbox's login myself. It can read an order. It can't change an order or see customers' passwords.
+
+```text
+$ psql -d shop -c "select count(*) from users;"
+ count
+-------
+    10
+(1 row)
+
+$ psql -d shop -c "select order_id, customer_email, status from customer_orders order by order_id;"
+ order_id |     customer_email      |   status
+----------+-------------------------+------------
+        1 | alice.jones@example.com | DELIVERED
+        2 | alice.jones@example.com | DELIVERED
+        3 | alice.jones@example.com | SHIPPED
+        4 | alice.jones@example.com | PROCESSING
+        5 | bob.smith@techmail.com  | DELIVERED
+        6 | bob.smith@techmail.com  | CANCELLED
+        7 | bob.smith@techmail.com  | PROCESSING
+        8 | charlie.d@webmail.com   | DELIVERED
+        9 | diana.prince@hero.net   | DELIVERED
+       10 | diana.prince@hero.net   | RETURNED
+       11 | evan.g@bizcorp.com      | SHIPPED
+       12 | fiona.shrek@swamp.com   | CANCELLED
+       13 | george.j@jungle.com     | PROCESSING
+       14 | hannah.m@school.edu     | DELIVERED
+       15 | ian.malcolm@chaos.com   | DELIVERED
+       16 | julia.child@kitchen.com | DELIVERED
+       17 | julia.child@kitchen.com | PROCESSING
+(17 rows)
+
+$ psql -d shop -c "insert into actions_log (user_email, action_type, parameters) values ('x','RETURN_ITEM','{}');"
+ERROR:  new row for relation "actions_log" violates check constraint "actions_log_action_type_check"
+DETAIL:  Failing row contains (1, 2026-10-01 10:07:03.139929+01, x, RETURN_ITEM, {}).
+
+# As the Toolbox's login (-U toolbox):
+$ psql -h localhost -U toolbox -d shop -c "select order_id, status from customer_orders where order_id = 5;"
+ order_id |  status
+----------+-----------
+        5 | DELIVERED
+(1 row)
+
+$ psql -h localhost -U toolbox -d shop -c "update customer_orders set status = 'CANCELLED' where order_id = 5;"
+ERROR:  permission denied for table customer_orders
+
+$ psql -h localhost -U toolbox -d shop -c "select email, password from users;"
+ERROR:  permission denied for table users
+```
 
 ## Stage 2: the tools, and where access control lives
 - **Before reading SPEC R-1, I thought ownership belonged in:** Code. It's an access rule, so it must hold every time, and a prompt can be ignored.
