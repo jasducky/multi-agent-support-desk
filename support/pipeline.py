@@ -3,8 +3,7 @@
 The CLI and the web server only render what this yields. Each turn also writes
 runs/<turn_id>.json (EVALS 4.1) before its last event.
 
-Steps so far, in the order P-2 fixes: sanitize -> judge -> guardrail -> agent. Stage 8 adds
-recall, mask and save. A block ends the turn at once (P-3); a guard that fails ends
+Steps, in the order P-2 fixes: sanitize -> judge -> guardrail -> recall -> agent -> mask -> save. A block ends the turn at once (P-3); a guard that fails ends
 it with an error naming the step, never with "allow" (P-4).
 """
 
@@ -30,19 +29,22 @@ from guards import sanitizer
 from guards.guardrail import BLOCK_REPLIES, Guardrail
 from guards.guardrail import PROMPT_VERSION as GUARDRAIL_VERSION
 from support import telemetry
+from support.memory import Memory
 from support.agent import MODEL, PROMPT_VERSION, build_agent
 
 # ADK announces that it describes tools to Gemini in a newer, "experimental" way. Harmless.
 warnings.filterwarnings("ignore", message=r".*\[EXPERIMENTAL\].*")
 # google-genai logs a long advisory about its automatic function calling on every Guardrail call.
 logging.getLogger("google_genai.models").setLevel(logging.ERROR)
+warnings.filterwarnings("ignore", category=DeprecationWarning)  # library-internal notices
 
 ROOT = Path(__file__).resolve().parent.parent
 TOOLBOX_URL = "http://127.0.0.1:5001"
 APP_NAME = "customer_support"
 BOUND = ("customer_email", "user_email")  # filled in from the log-in, never by the model (M-5)
 JUDGE_URL = "http://127.0.0.1:10002/"
-JUDGE_TIMEOUT_S = 15
+MASKER_URL = "http://127.0.0.1:10003/"
+GUARD_TIMEOUT_S = 15
 BLOCKED_REPLY = "Sorry, I can't help with that message. I can help with your orders, deliveries, returns and account."
 
 
@@ -50,28 +52,41 @@ class GuardError(Exception):
     """A guard could not give a verdict: unreachable, timed out, or an answer we can't read."""
 
 
-async def ask_judge(message: str) -> tuple[str, str]:
-    """One A2A `message/send` call to the Security Judge (J-1). Returns (verdict, reason)."""
+async def _a2a(url: str, name: str, text: str) -> dict:
+    """One A2A `message/send` call (J-1, K-1). Returns the service's JSON answer."""
     request = {
         "jsonrpc": "2.0", "id": uuid.uuid4().hex, "method": "message/send",
         "params": {"message": {"role": "user", "messageId": uuid.uuid4().hex,
-                               "parts": [{"kind": "text", "text": message}]}},
+                               "parts": [{"kind": "text", "text": text}]}},
     }
     try:
-        async with httpx.AsyncClient(timeout=JUDGE_TIMEOUT_S) as client:
-            reply = (await client.post(JUDGE_URL, json=request)).json()
+        async with httpx.AsyncClient(timeout=GUARD_TIMEOUT_S) as client:
+            reply = (await client.post(url, json=request)).json()
     except httpx.TimeoutException:
-        raise GuardError(f"Security Judge timed out after {JUDGE_TIMEOUT_S}s")
+        raise GuardError(f"{name} timed out after {GUARD_TIMEOUT_S}s")
     except (httpx.HTTPError, ValueError) as exc:
-        raise GuardError(f"Security Judge unreachable: {type(exc).__name__}: {exc}")
+        raise GuardError(f"{name} unreachable: {type(exc).__name__}: {exc}")
     try:
-        text = reply["result"]["artifacts"][-1]["parts"][0]["text"]
-        verdict = json.loads(text.strip().removeprefix("```json").removesuffix("```"))
-        if verdict["verdict"] not in ("allow", "block") or not verdict.get("reason"):
-            raise ValueError(verdict)
+        answer = reply["result"]["artifacts"][-1]["parts"][0]["text"]
+        return json.loads(answer.strip().removeprefix("```json").removesuffix("```"))
     except (KeyError, IndexError, TypeError, ValueError) as exc:
-        raise GuardError(f"Security Judge gave no readable verdict: {str(reply)[:200]}") from exc
+        raise GuardError(f"{name} gave no readable answer: {str(reply)[:200]}") from exc
+
+
+async def ask_judge(message: str) -> tuple[str, str]:
+    """The Security Judge's verdict: (allow | block, reason) (J-3)."""
+    verdict = await _a2a(JUDGE_URL, "Security Judge", message)
+    if verdict.get("verdict") not in ("allow", "block") or not verdict.get("reason"):
+        raise GuardError(f"Security Judge gave no readable verdict: {verdict}")
     return verdict["verdict"], verdict["reason"]
+
+
+async def ask_masker(reply: str, email: str) -> dict:
+    """The Data Masker's answer: masked text plus what it changed (K-1, K-3)."""
+    answer = await _a2a(MASKER_URL, "Data Masker", json.dumps({"text": reply, "user_email": email}))
+    if not isinstance(answer.get("masked_text"), str) or "count" not in answer:
+        raise GuardError(f"Data Masker gave no readable answer: {answer}")
+    return answer
 
 
 def _tool_info() -> dict:
@@ -117,6 +132,7 @@ class SupportPipeline:
         self._runners: dict[str, tuple[Runner, str]] = {}  # email -> (runner, session id)
         self._tool_info = _tool_info()
         self._guardrail = Guardrail()
+        self._memory = Memory()
 
     async def __aenter__(self):
         return self
@@ -263,13 +279,43 @@ class SupportPipeline:
                 yield e
             return
 
-        # 4. The support agent.
+        # 4. Recall: a pipeline step, not a tool (R-1, R-6).
+        yield {"type": "stage", "key": "recall", "label": "Memory recall (Mem0)"}
+        t = time.monotonic()
+        with self._tracer.start_as_current_span("memory.recall", attributes={
+                "openinference.span.kind": "RETRIEVER", "input.value": message}) as s:
+            try:
+                memories = await self._memory.recall(email, message)
+                for i, m in enumerate(memories):
+                    s.set_attribute(f"retrieval.documents.{i}.document.content", m["memory"])
+                    s.set_attribute(f"retrieval.documents.{i}.document.score", m["score"])
+                failure = None
+            except Exception as exc:
+                s.set_status(Status(StatusCode.ERROR, str(exc)))
+                s.record_exception(exc)
+                failure = f"Memory recall failed: {type(exc).__name__}: {exc}"
+        if failure:
+            record["steps"].append({"key": "recall", "status": "error", "ms": ms_since(t)})
+            for e in finish("error", "recall", failure):
+                yield e
+            return
+        inserted = sum(m["inserted"] for m in memories)
+        ms = ms_since(t)
+        record["steps"].append({"key": "recall", "status": "passed", "ms": ms,
+                                "inserted": inserted, "skipped": len(memories) - inserted})
+        yield {"type": "step", "key": "recall", "status": "passed", "ms": ms,
+               "detail": f"{inserted} used, {len(memories) - inserted} skipped",
+               "span": "memory.recall", "kind": "Python fn",
+               "memories": [{k: m[k] for k in ("memory", "score", "inserted", "reason")} for m in memories]}
+
+        # 5. The support agent.
         yield {"type": "stage", "key": "agent", "label": "Support agent (ADK, tools over MCP)"}
         agent_started = last_llm_start = time.monotonic()
         call_ids: dict[str, tuple[int, float]] = {}  # ADK's call id -> (our id, when it was called)
         response = ""
         try:
-            new_message = types.Content(role="user", parts=[types.Part(text=message)])
+            agent_input = Memory.as_prompt(memories, message)  # R-3: memories above the message
+            new_message = types.Content(role="user", parts=[types.Part(text=agent_input)])
             async for event in runner.run_async(
                 user_id=email, session_id=session_id, new_message=new_message
             ):
@@ -332,6 +378,49 @@ class SupportPipeline:
 
         yield {"type": "step", "key": "agent", "status": "passed", "detail": "answered",
                "ms": ms_since(agent_started), "span": "invoke_agent", "kind": "in-process"}
+
+        # 6. Data Masker: its own service, over A2A (K-1 to K-3).
+        yield {"type": "stage", "key": "mask", "label": "A2A Data Masker"}
+        t = time.monotonic()
+        with self._tracer.start_as_current_span("security.a2a_mask", attributes={
+                "openinference.span.kind": "GUARDRAIL", "input.value": response}) as s:
+            try:
+                masked = await ask_masker(response, email)
+                s.set_attribute("output.value", json.dumps(masked))
+                failure = None
+            except GuardError as exc:
+                s.set_status(Status(StatusCode.ERROR, str(exc)))
+                s.record_exception(exc)
+                failure = str(exc)
+        if failure:  # never show an unmasked reply
+            record["steps"].append({"key": "mask", "status": "error", "ms": ms_since(t)})
+            for e in finish("error", "mask", failure):
+                yield e
+            return
+        response = masked["masked_text"]
+        detail = ("masked " + ", ".join(masked["changes"])) if masked["count"] else "nothing to mask"
+        yield step("mask", True, detail, ms_since(t), "security.a2a_mask", "A2A")
+
+        # 7. Save: the customer's own message only, never the reply (R-4).
+        yield {"type": "stage", "key": "save", "label": "Memory save (Mem0)"}
+        t = time.monotonic()
+        with self._tracer.start_as_current_span("memory.save", attributes={
+                "openinference.span.kind": "TOOL", "input.value": message}) as s:
+            try:
+                status = await self._memory.save(email, message)
+                s.set_attribute("output.value", status)
+                failure = None
+            except Exception as exc:
+                s.set_status(Status(StatusCode.ERROR, str(exc)))
+                s.record_exception(exc)
+                failure = f"Memory save failed: {type(exc).__name__}: {exc}"
+        if failure:
+            record["steps"].append({"key": "save", "status": "error", "ms": ms_since(t)})
+            for e in finish("error", "save", failure):
+                yield e
+            return
+        yield step("save", True, f"your message sent to Mem0 ({status})", ms_since(t),
+                   "memory.save", "Python fn")
 
         span.set_attribute("output.value", response)
         record.update(terminated="done", wall_clock_ms=ms_since(started))

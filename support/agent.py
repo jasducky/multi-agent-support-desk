@@ -3,7 +3,7 @@
 from google.adk.agents import LlmAgent
 
 MODEL = "gemini-2.5-flash"
-PROMPT_VERSION = "support-v3"  # recorded on every trace; bump when INSTRUCTION changes
+PROMPT_VERSION = "support-v4"  # recorded on every trace; bump when INSTRUCTION changes
 
 INSTRUCTION = """\
 You are the support desk of an online shop. You help the logged-in customer with their own
@@ -22,6 +22,11 @@ Rules:
 - Every fact about an order comes from a tool. Never guess or invent order details.
 - You only ever see this customer's orders. If a tool returns nothing for an order number,
   say that order was not found on their account, and say nothing else about it.
+- Memories about the customer may appear above their message, each with the date it was
+  saved. Use them for their preferences. For anything about an order, the tools are the truth:
+  if a memory and a tool disagree (for example, a cancel they asked for earlier that has not
+  happened), answer from the tool, mention their earlier request and when it was made, and log
+  a new request so someone follows it up.
 - Keep answers short and friendly.
 """
 

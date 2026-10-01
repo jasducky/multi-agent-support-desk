@@ -34,7 +34,11 @@ def render(event: dict) -> str | None:
         return None  # its step line says how it went
     if kind == "step":
         mark = "✓" if event["status"] == "passed" else "✗"
-        return f"{mark} {event['key']:<12} {event['status']:<8} {_secs(event['ms'])}   {event.get('detail', '')}"
+        line = f"{mark} {event['key']:<12} {event['status']:<8} {_secs(event['ms'])}   {event.get('detail', '')}"
+        for m in event.get("memories", []):  # the recall list (R-5)
+            used = "used" if m["inserted"] else f"skipped, {m['reason']}"
+            line += f"\n     ◆ \"{m['memory']}\" ({m['score']}) {used}"
+        return line
     if kind == "llm":
         return (f"· llm          {event['decision']}   "
                 f"{event['tokens_in']}→{event['tokens_out']} tokens   {_secs(event['ms'])}")
@@ -63,7 +67,8 @@ def render(event: dict) -> str | None:
 # C-4: name the missing service instead of failing halfway through a turn.
 SERVICES = {"Toolbox (./run.sh start)": "http://127.0.0.1:5001",
             "Phoenix (./run.sh start)": "http://localhost:6006/healthz",
-            "Security Judge (./run.sh start)": "http://127.0.0.1:10002/.well-known/agent-card.json"}
+            "Security Judge (./run.sh start)": "http://127.0.0.1:10002/.well-known/agent-card.json",
+            "Data Masker (./run.sh start)": "http://127.0.0.1:10003/.well-known/agent-card.json"}
 
 
 def missing_services() -> list[str]:

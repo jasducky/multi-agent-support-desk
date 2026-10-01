@@ -4,7 +4,7 @@
 #   ./run.sh setup    once: create the `shop` database and its two least-privilege logins
 #   ./run.sh reset    every test run: rebuild the tables and sample data (db/seed.sql)
 #   ./run.sh toolbox  start the MCP Toolbox (the database tools) on port 5001
-#   ./run.sh start    start the background services (Toolbox, Phoenix, Judge); logs in .run/
+#   ./run.sh start    start the background services (Toolbox, Phoenix, Judge, Masker); logs in .run/
 #   ./run.sh stop     stop them
 #   ./run.sh chat     the chat in the terminal (needs the services running)
 #   ./run.sh check N  run stage N's "Prove it" next to the prediction in BUILD_LOG.md
@@ -77,9 +77,11 @@ case "${1:-}" in
     PHOENIX_WORKING_DIR="$PWD/.phoenix" start_bg phoenix 6006 .venv/bin/phoenix serve
     # J-1: the Security Judge, its own process, reached over A2A.
     start_bg judge 10002 .venv/bin/uvicorn guards.judge:app --host 127.0.0.1 --port 10002
+    # K-1: the Data Masker, its own process, reached over A2A.
+    start_bg masker 10003 .venv/bin/uvicorn guards.masker:app --host 127.0.0.1 --port 10003
     ;;
   stop)
-    for pair in toolbox:5001 phoenix:6006 judge:10002; do
+    for pair in toolbox:5001 phoenix:6006 judge:10002 masker:10003; do
       name=${pair%%:*} port=${pair##*:}
       pids=$(lsof -ti "tcp:$port" || true)
       [ -n "$pids" ] && kill $pids && echo "$name: stopped" || echo "$name: was not running"
@@ -171,7 +173,14 @@ case "${1:-}" in
         $PY -m eval.guards_count
         ./run.sh reset > /dev/null  # the turns may have logged real requests; start clean
         ;;
-      *) echo "usage: ./run.sh check <stage number>  (stages so far: 4, 5, 6, 7)" >&2; exit 1 ;;
+      8)
+        echo "== Your decision (BUILD_LOG.md, Stage 8) =="
+        grep -m1 'what counts as PII, the cutoff' BUILD_LOG.md | sed 's/^- //'
+        echo
+        $PY -W ignore -m eval.check8
+        ./run.sh reset > /dev/null  # the turns may have logged real requests; start clean
+        ;;
+      *) echo "usage: ./run.sh check <stage number>  (stages so far: 4 to 8)" >&2; exit 1 ;;
     esac
     ;;
   *)
