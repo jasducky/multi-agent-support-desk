@@ -58,10 +58,37 @@ case "${1:-}" in
         --allowed-hosts localhost:5001,127.0.0.1:5001 --allowed-origins http://localhost,http://127.0.0.1
     ;;
   chat)
-    exec .venv/bin/python -m support.cli_bare
+    exec .venv/bin/python -m support.cli
+    ;;
+  check)
+    # One stage's "Prove it" from TECHNICAL.md, printed under the prediction from BUILD_LOG.md.
+    curl -s -o /dev/null localhost:5001 || { echo "Start the Toolbox first: ./run.sh toolbox"; exit 1; }
+    PY=.venv/bin/python
+    mkdir -p reports
+    exec > >(tee "reports/check-${2:-}.txt")  # keep a copy for the build log (reports/ is git-ignored)
+    case "${2:-}" in
+      4)
+        echo "== Your prediction (BUILD_LOG.md, Stage 4) =="
+        grep -m1 'first event after the agent stage' BUILD_LOG.md | sed 's/^- //'
+        echo
+        echo "== Course check: the events for 'What is the status of order 3?' as Alice =="
+        echo "What is the status of order 3?" \
+          | $PY -m support.cli --user alice.jones@example.com --password alice --events \
+          | jq -c '{type, name, key}'
+        echo
+        echo "== The run file that turn wrote =="
+        RUN=$(ls -t runs/*.json | head -1); echo "$RUN"; cat "$RUN"
+        echo
+        echo "== The same question, as the readable chat shows it =="
+        echo "What is the status of order 3?" \
+          | $PY -m support.cli --user alice.jones@example.com --password alice
+        echo
+        ;;
+      *) echo "usage: ./run.sh check <stage number>  (stages so far: 4)" >&2; exit 1 ;;
+    esac
     ;;
   *)
-    echo "usage: ./run.sh setup | reset | toolbox | chat" >&2
+    echo "usage: ./run.sh setup | reset | toolbox | chat | check N" >&2
     exit 1
     ;;
 esac

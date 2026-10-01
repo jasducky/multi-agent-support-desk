@@ -111,7 +111,23 @@ Agent: Order 5 was not found on your account.
 
   Every line shows its time (a tool's time is on its result line). The last line shows the total, with ✓ if it's within the speed target. The tool line shows the email as bound, which proves stage 3. The recall line shows the memory text, so I can see which memory was used.
 - **I predicted the first event after the agent stage would be:** The model's decision (`llm`). The model reads the message and decides it needs a tool. Tools only run when the model asks, so the tool call comes after.
-- **What happened:**
+- **What happened:** As I predicted. The first event after the agent started was the model's decision (`llm`): call `get-order-status`. Then came the tool call and its result, then a second model decision with the final answer. The run file shows one tool call and two model calls.
+
+```json
+{
+  "turn_id": "turn_20261001-111443_84ff67",
+  "trace_id": null,
+  "user": "alice.jones@example.com",
+  "message": "What is the status of order 3?",
+  "terminated": "done",
+  "blocked_at": null,
+  "wall_clock_ms": 1829,
+  "tokens": { "in": 1438, "out": 50 },
+  "steps": [],
+  "tool_calls": [ { "name": "get-order-status", "ok": true, "ms": 3 } ],
+  "llm_calls": 2
+}
+```
 
 ## Stage 5: one trace per turn
 - **I decided (what goes in span attributes, who can see Phoenix):** I record everything: the message, the conversation, tool calls and results, times, tokens, the model and the prompt version. Messages can hold personal details like a phone number. I need to see them to check the mask step hid them in the reply, so I limit who can open traces rather than hiding the data. The exception is card numbers, which are removed before anything is recorded. Here Phoenix runs only on my laptop. In a real shop, only named engineers behind a login could open it. The spec asks for the same.
