@@ -75,19 +75,32 @@ For A2A I use message/send, one of the two names the spec allows. The newest ver
 
 If an order changes after a memory was saved, the database wins. Each memory is shown to the agent with the date it was saved (Mem0 already records this), and the agent's instructions say order facts come from the tools. If a memory and the database disagree, for example a cancel the customer asked for last week that never happened, the agent answers from the database, mentions the earlier request and when it was made, and logs a new request so someone follows it up. The agent can't read the action log itself, so it only spots this through memory.
 
-**Found while building.** Not fixed yet: I'll decide after the Stage 10 run.
+**Found while building.** I left these until after the final run (run 2). The last sentence of each says where it ended up.
 
-- **Masking (Stages 8 and 9).** Saw: a customer gave a neighbour's phone number and email. They were kept in plain text in memory, the traces and the action log, and showed on the steps page. The Masker only checks the reply, and saving only removes card numbers. Change: remove phone numbers and other people's emails before anything is saved, as we do for card numbers.
-- **Memory (Stage 9).** Saw: every question is saved as a memory too, such as "User asked for the status of order 3". Memory fills with questions as well as facts. Change: check in Stage 10 whether these push out real facts. If they do, save only facts.
-- **Time limit (Stage 10).** Saw: nothing stops a turn that runs past 30 seconds, so a slow turn is never marked as over its limit. Change: if a turn in the eval goes past 30 seconds, end it there and mark it as over the limit.
-- **Finding failures (Stage 10).** Saw: Phoenix only marks a turn red when the code breaks. A wrong answer looks fine there, so I could not tell which traces failed the evals. I had to take the trace id from the eval report. Change: have the eval runner label each trace in Phoenix as passed or failed, so I can filter to the failures. For now, a review page (`./run.sh review`) shows each eval item's result next to its trace, with a place for my notes.
+- **Masking (Stages 8 and 9).** Saw: a customer gave a neighbour's phone number and email. They were kept in plain text in memory, the traces and the action log, and showed on the steps page. The Masker only checks the reply, and saving only removes card numbers. Change: remove phone numbers and other people's emails before anything is saved, as we do for card numbers. Not done yet.
+- **Memory (Stage 9).** Saw: every question is saved as a memory too, such as "User asked for the status of order 3". Memory fills with questions as well as facts. Change: check in Stage 10 whether these push out real facts. If they do, save only facts. Run 2 showed they score low (0.14 or less), so they did not push out any facts. No change.
+- **Time limit (Stage 10).** Saw: nothing stops a turn that runs past 30 seconds, so a slow turn is never marked as over its limit. Change: if a turn in the eval goes past 30 seconds, end it there and mark it as over the limit. Not built. The slowest turn in run 2 took 10 seconds.
+- **Finding failures (Stage 10).** Saw: Phoenix only marks a turn red when the code breaks. A wrong answer looks fine there, so I could not tell which traces failed the evals. I had to take the trace id from the eval report. Change: have the eval runner label each trace in Phoenix as passed or failed, so I can filter to the failures. For now, a review page (`./run.sh review`) shows each eval item's result next to its trace, with a place for my notes. The review page is built. The labels in Phoenix are not.
 - **Repeated requests (Stage 10, future development).** Saw: a customer asked where her USB-C hub was. Memory held her earlier cancel request, the order was still processing, so the agent logged a second cancel instead of answering. The agent cannot read the action log, so it cannot tell a request is already raised. Change, for later: give the agent a tool to read this customer's own past requests. Then it can say "Your order is still processing. There is already a request to cancel it, so you don't need to do anything." This avoids duplicates and reassures the customer.
-- **Cut-off (Stage 8).** Saw: my planted memory scored 0.26, only just above the 0.25 cut-off. Change: none yet. I'll look at the memory results in Stage 10 before moving it.
+- **Cut-off (Stage 8).** Saw: my planted memory scored 0.26, only just above the 0.25 cut-off. Change: none yet. I'll look at the memory results in Stage 10 before moving it. I kept it at 0.25. See Trade-offs.
 
 ## Trade-offs
 
-What each check costs in time: to add after the build, from the traces.
+What each check costs in time, from the run files of run 2 (115 turns). "Typical" is the middle turn. "Slow" means 95 in 100 turns were faster.
+
+| Check | Typical | Slow |
+|---|---|---|
+| Sanitize | under 1 ms | under 1 ms |
+| Judge | 1.0 s | 2.1 s |
+| Guardrail | 1.0 s | 1.3 s |
+| Masker | 12 ms | 25 ms |
+
+A whole turn typically takes 4.5 seconds, so the Judge and the Guardrail add about 2 seconds. I think that is worth it. Together they blocked all 30 attacks and all 15 off-topic messages, and none of the 30 normal questions. Hannah's question, above, was the one wrong block, and it came from a different test set.
 
 If the Guardrail can't get a clear answer from Gemini, the message is stopped with an error rather than let through. The cost is that a customer may wait, get an error and have to try again. If Gemini is fully down, this costs nothing extra, as the support agent couldn't answer either. It matters when Gemini is only partly working. Letting messages through then would bypass the Guardrail, so requests that aren't about support, like recipes, would get answered and cost tokens and money. Someone could even make the Guardrail fail on purpose to get past it.
 
 I kept the memory cut-off at 0.25, the course's own figure. Each memory gets a score for how well it matches the customer's message, and only memories scoring 0.25 or more are given to the agent. Set it too high and useful memories are missed, so customers have to repeat themselves. Set it too low and unrelated memories get in and muddle the answer. In the course's own tests, a real preference scored 0.30 and unrelated chatter scored below 0.25, so 0.25 sits between them. Support questions are usually about one recent issue, which should match well. I'll check it against my planted memory's score after the build and only change it if that shows a problem.
+
+**What run 2 showed about memory.** Memory recall was 0.5, below the 0.80 target. There were five misses. In three, the right fact was found but scored just under 0.25 (0.17, 0.19 and 0.23), so it was not used. In one, the Guardrail blocked Hannah's question before memory was checked. In one, nothing came back at all. Lowering the cut-off to 0.15 would pass the test. But unrelated saved lines scored 0.11 to 0.16, so they would start getting in. That change would only fit this test, so I kept 0.25 and left the miss in my report.
+
+**What the eval does not test.** Every eval conversation is a single message. Real customers send several messages in a row. So I have not tested whether an attack split over several messages gets through, or whether the agent mixes things up in a longer conversation.
