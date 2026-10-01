@@ -26,7 +26,9 @@ async def turn(pipeline: SupportPipeline, who: str, message: str) -> None:
 
 async def main() -> None:
     async with SupportPipeline() as pipeline:
-        await pipeline._memory.forget(DIANA)  # start from no memories, as the eval runner does
+        # Start from no memories, as the eval runner does. Mem0 deletes in the background, so wait
+        # until it is really empty: otherwise the delete can wipe the memory planted next.
+        await pipeline._memory.forget_and_wait(DIANA)
         await pipeline.log_in(DIANA, "diana")
         await pipeline.log_in(ALICE, "alice")
 
@@ -35,6 +37,10 @@ async def main() -> None:
 
         print(f"\n(waiting {WAIT_S} seconds for Mem0 to turn the message into a memory)")
         time.sleep(WAIT_S)
+        print("Mem0 now holds for Diana:", await pipeline._memory.all(DIANA) or "nothing")
+
+        # A fresh log-in starts a new chat, so the reply can only know the answer from memory.
+        await pipeline.log_in(DIANA, "diana")
 
         print("\n== Part 2: Diana asks (expect recall to list the memory with its score, and the reply to use it) ==")
         await turn(pipeline, DIANA, "Where should you leave my packages?")

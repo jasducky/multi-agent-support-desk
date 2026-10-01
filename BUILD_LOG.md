@@ -185,8 +185,8 @@ agent.turn input: "What is the status of order 3? My card is [card number remove
 
 ## Stage 8: Masker and memory
 - **I decided (what counts as PII, the cutoff):** The Masker hides other people's emails, all phone numbers, and card numbers except the last four digits. Customers can still see their own email and address. The shop holds no phone numbers, so every phone number is hidden. In this build it's a safety net, as the tools already block other customers' data. I'm keeping the memory cut-off at 0.25, as support questions are usually about one recent issue. I'd only change it if my test memory scores below 0.25.
-- **My planted memory's score, and whether my cutoff kept it:**
-- **What the Masker reported on my PII test:**
+- **My planted memory's score, and whether my cutoff kept it:** The back door memory scored 0.26. The cut-off is 0.25, so it was kept. The answer came from memory.
+- **What the Masker reported on my PII test:** It hid 1 phone number and 1 email address. The customer did not see them.
 
 ## Stage 9: the web UI
 - **My sketch, in words:** The chat is on the left and the steps are on the right, read top to bottom. The customer's message comes first, then its steps fill in live on the right, then the reply appears below them. I'll try a couple of versions when building and keep the clearest. Customers wouldn't see this, as it's for the course, to watch the system work, and in a real shop only the product and technical people who assess the system would see it.

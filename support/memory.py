@@ -8,6 +8,7 @@ save (R-4): only the customer's own message, only on turns that were not blocked
 are removed first (Julia's decision: card numbers are never recorded).
 """
 
+import asyncio
 import os
 
 os.environ.setdefault("MEM0_TELEMETRY", "False")  # Mem0's own usage analytics: off
@@ -61,3 +62,23 @@ class Memory:
     async def forget(self, email: str) -> None:
         """Clear a customer's memories (the eval runner does this before a run)."""
         await self._client.delete_all(user_id=email)
+
+    async def all(self, email: str) -> list[str]:
+        """Every memory Mem0 holds for this customer, as text."""
+        found = await self._client.get_all(filters={"user_id": email})
+        rows = found.get("results", []) if isinstance(found, dict) else found
+        return [m.get("memory", "") for m in rows]
+
+    async def forget_and_wait(self, email: str, timeout_s: int = 60) -> float:
+        """Clear, then wait until Mem0 really holds nothing for this customer.
+
+        Mem0 deletes in the background, so a memory saved straight after forget() can be wiped
+        by the delete that is still running. Returns the seconds it took.
+        """
+        start = asyncio.get_running_loop().time()
+        await self.forget(email)
+        while await self.all(email):
+            if asyncio.get_running_loop().time() - start > timeout_s:
+                raise TimeoutError(f"Mem0 still holds memories for {email} after {timeout_s} s")
+            await asyncio.sleep(3)
+        return asyncio.get_running_loop().time() - start
