@@ -194,7 +194,7 @@ agent.turn input: "What is the status of order 3? My card is [card number remove
 
 ## Stage 10: the eval runner
 - **How I handled the memory waits:** I'll plant all ten memory facts first, run the other tests, then ask the ten memory questions. The other tests take longer than the two-minute wait, so no time is spent just waiting. The runner will check the time before each question. I won't run the memory tests all at once, as that could hit the model's usage limits and make failures harder to follow.
-- **First run's failing rows, and what I changed:**
+- **First run's failing rows, and what I changed:** Run 1 missed three targets: order answers (10 of 12), action requests logged (6 of 8) and memory recall (6 of 10). I ranked the failures by harm to customers, how many it hit, and effort. The top one: asked to cancel or return something, the agent asked for the order number instead of looking it up, so nothing was logged. I changed the agent's instructions: look the order up first, and only ask if no order or more than one matches (`support-v5`).
 - **Second run: see `reports/eval.json` (don't retype numbers here).**
-- **Successful turn I read end to end (trace id), and what it taught me:**
-- **Failing turn I read end to end (trace id), and what it taught me:**
+- **Successful turn I read end to end (trace id), and what it taught me:** `94fd180a88e1d1b2c31df2c7a5939c2b`. The customer asked for the status of order 3 and got a clear answer: shipped, the delivery address and what was ordered. Every fact in the reply matched what the order tool returned. All the guards passed, nothing needed masking, and the question was saved to memory at the end.
+- **Failing turn I read end to end (trace id), and what it taught me:** `5feaf7df08997fd9571235694eaddf97`. The pipeline could not reach the Security Judge: the connection failed. The turn stopped there with an error. Nothing after the Judge ran, and the customer got no answer. A guard that can't be reached stops the turn rather than letting the message through. (We had stopped the Judge on purpose for this test.)
