@@ -219,7 +219,17 @@ case "${1:-}" in
         echo "== Now open the page and try it: http://localhost:8000 (alice.jones@example.com / alice) =="
         ./run.sh reset > /dev/null  # the turns may have logged real requests; start clean
         ;;
-      *) echo "usage: ./run.sh check <stage number>  (stages so far: 4 to 9)" >&2; exit 1 ;;
+      10)
+        echo "== Your decision (BUILD_LOG.md, Stage 10) =="
+        grep -m1 'How I handled the memory waits' BUILD_LOG.md | sed 's/^- //'
+        echo
+        echo "== Course check: the eval runner, every gate in EVALS.md section 5, in order =="
+        echo "(about 125 real turns, one at a time: 20 to 25 minutes. The report is reports/eval.json)"
+        echo
+        $PY -W ignore -m eval.run
+        echo "(exit code $?: 0 all gates passed, 1 warnings only, 2 a gate failed)"
+        ;;
+      *) echo "usage: ./run.sh check <stage number>  (stages so far: 4 to 10)" >&2; exit 1 ;;
     esac
     ;;
   *)

@@ -222,6 +222,8 @@ class SupportPipeline:
             """The turn's last event, after writing its run file. Blocked and error turns."""
             record.update(terminated=status, blocked_at=key if status == "blocked" else None,
                           wall_clock_ms=ms_since(started))
+            if error:  # A2: an error turn says why in its run log, not only in the stream
+                record["error"] = f"{key}: {error}"
             self._write_run(record)
             if status == "error":
                 span.set_status(Status(StatusCode.ERROR, error))
@@ -393,7 +395,8 @@ class SupportPipeline:
         except Exception as exc:  # fail loud: the turn ends with an error naming the step
             span.set_status(Status(StatusCode.ERROR, str(exc)))
             span.record_exception(exc)
-            record.update(terminated="error", wall_clock_ms=ms_since(started))
+            record.update(terminated="error", wall_clock_ms=ms_since(started),
+                          error=f"agent: {type(exc).__name__}: {exc}")
             self._write_run(record)
             yield {"type": "error", "step": "agent", "status": 502,
                    "error": f"{type(exc).__name__}: {exc}", "terminated": "error"}
