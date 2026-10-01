@@ -16,7 +16,7 @@ Each check is a separate part with its own job and only the access it needs, so 
 
 ## Responsibilities
 
-Who stops a customer seeing someone else's orders: two parts together. The tool's database query in the Toolbox only returns an order when the order number and the email both match. The pipeline fixes that email to the logged-in customer at login, so the model can't change it. (Exact file and line to add after the build.)
+Who stops a customer seeing someone else's orders: two parts together. The tool's database query in the Toolbox only returns an order when the order number and the email both match. The pipeline fixes that email to the logged-in customer at login, so the model can't change it. The query is in `mcp_toolbox/tools.yaml`, line 59: an order only comes back when the number and the email both match. The email is fixed at login in `support/pipeline.py`, line 154.
 
 Who holds the API keys: only the programs that call an outside service. The pipeline, the Judge and the Masker hold the Gemini key, and the pipeline holds the Mem0 key. The Toolbox holds the database password. Keys live in a .env file that is kept out of git, never in the code. The model never sees them, and the web page never gets one, as anything sent to a browser can be read.
 
